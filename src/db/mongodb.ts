@@ -10,6 +10,7 @@ const MONGODB_URI = process.env.MONGODB_URI || "" ;
 
 export const connectDB = async (): Promise<void> => {
   try {
+    console.log("mongo_url", MONGODB_URI);
     const conn = await mongoose.connect(MONGODB_URI);
     log(`MongoDB Connected: ${conn.connection.host}`);
   } catch (error: any) {
