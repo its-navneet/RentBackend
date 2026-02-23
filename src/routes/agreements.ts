@@ -1,6 +1,8 @@
 import express, { Request, Response } from 'express';
-import mockDb from '../services/mockDb';
-import { Agreement } from '../types';
+import db from '../services/db';
+import { Agreement, IAgreement } from '../models/Agreement';
+import { Property } from '../models/Property';
+import mongoose from 'mongoose';
 
 const router = express.Router();
 
@@ -8,9 +10,9 @@ const router = express.Router();
 router.get('/', async (req: Request, res: Response) => {
   try {
     const { studentId, ownerId, propertyId, status } = req.query;
-    const agreements: Agreement[] = [];
+    const agreements: any[] = [];
     
-    const snapshot = await mockDb.collection('agreements').get();
+    const snapshot = await db.collection('agreements').get();
     snapshot.forEach((doc: any) => {
       agreements.push(doc.data());
     });
@@ -46,7 +48,7 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const doc = await mockDb.collection('agreements').doc(id).get();
+    const doc = await db.collection('agreements').doc(id).get();
 
     if (!doc.exists) {
       return res.status(404).json({
@@ -80,7 +82,7 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     // Check if property exists
-    const propertyDoc = await mockDb.collection('properties').doc(propertyId).get();
+    const propertyDoc = await db.collection('properties').doc(propertyId).get();
     if (!propertyDoc.exists) {
       return res.status(404).json({
         success: false,
@@ -88,26 +90,20 @@ router.post('/', async (req: Request, res: Response) => {
       });
     }
 
-    const id = 'agreement_' + Date.now();
-    const agreement: Agreement = {
-      id,
-      propertyId,
-      studentId,
-      ownerId,
+    const agreement = new Agreement({
+      propertyId: new mongoose.Types.ObjectId(propertyId),
+      studentId: new mongoose.Types.ObjectId(studentId),
+      ownerId: new mongoose.Types.ObjectId(ownerId),
       termsAndConditions: termsAndConditions || 'Standard rental agreement',
       moveInDate: new Date(moveInDate),
       duration,
       depositAmount,
       monthlyRent,
       customClauses: customClauses || [],
-      signatureStudent: undefined,
-      signatureOwner: undefined,
       status: 'draft',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+    });
 
-    await mockDb.collection('agreements').doc(id).set(agreement);
+    await agreement.save();
 
     res.status(201).json({
       success: true,
@@ -128,7 +124,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     const updates = req.body;
 
-    const doc = await mockDb.collection('agreements').doc(id).get();
+    const doc = await db.collection('agreements').doc(id).get();
     if (!doc.exists) {
       return res.status(404).json({
         success: false,
@@ -136,16 +132,33 @@ router.put('/:id', async (req: Request, res: Response) => {
       });
     }
 
-    await mockDb.collection('agreements').doc(id).update({
-      ...updates,
-      updatedAt: new Date(),
-    });
+    // Handle mongoose ObjectIds if present
+    if (updates.propertyId) {
+      updates.propertyId = new mongoose.Types.ObjectId(updates.propertyId);
+    }
+    if (updates.studentId) {
+      updates.studentId = new mongoose.Types.ObjectId(updates.studentId);
+    }
+    if (updates.ownerId) {
+      updates.ownerId = new mongoose.Types.ObjectId(updates.ownerId);
+    }
 
-    const updatedDoc = await mockDb.collection('agreements').doc(id).get();
+    const agreement = await Agreement.findByIdAndUpdate(
+      id,
+      { ...updates, updatedAt: new Date() },
+      { new: true }
+    );
+
+    if (!agreement) {
+      return res.status(404).json({
+        success: false,
+        error: 'Agreement not found',
+      });
+    }
 
     res.json({
       success: true,
-      data: updatedDoc.data(),
+      data: agreement,
       message: 'Agreement updated successfully',
     });
   } catch (error: any) {
@@ -169,7 +182,7 @@ router.put('/:id/sign', async (req: Request, res: Response) => {
       });
     }
 
-    const doc = await mockDb.collection('agreements').doc(id).get();
+    const doc = await db.collection('agreements').doc(id).get();
     if (!doc.exists) {
       return res.status(404).json({
         success: false,
@@ -198,13 +211,22 @@ router.put('/:id/sign', async (req: Request, res: Response) => {
       }
     }
 
-    await mockDb.collection('agreements').doc(id).update(updates);
+    const agreement = await Agreement.findByIdAndUpdate(
+      id,
+      updates,
+      { new: true }
+    );
 
-    const updatedDoc = await mockDb.collection('agreements').doc(id).get();
+    if (!agreement) {
+      return res.status(404).json({
+        success: false,
+        error: 'Agreement not found',
+      });
+    }
 
     res.json({
       success: true,
-      data: updatedDoc.data(),
+      data: agreement,
       message: 'Agreement signed successfully',
     });
   } catch (error: any) {
@@ -220,7 +242,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    const doc = await mockDb.collection('agreements').doc(id).get();
+    const doc = await db.collection('agreements').doc(id).get();
     if (!doc.exists) {
       return res.status(404).json({
         success: false,
@@ -228,7 +250,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       });
     }
 
-    await mockDb.collection('agreements').doc(id).delete();
+    await Agreement.findByIdAndDelete(id);
 
     res.json({
       success: true,
@@ -243,5 +265,4 @@ router.delete('/:id', async (req: Request, res: Response) => {
 });
 
 export default router;
-
 

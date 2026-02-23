@@ -1,6 +1,9 @@
 import express, { Request, Response } from 'express';
-import mockDb from '../services/mockDb';
-import { User, StudentProfile, OwnerProfile } from '../types';
+import db from '../services/db';
+import { User } from '../models/User';
+import { StudentProfile } from '../models/StudentProfile';
+import { OwnerProfile } from '../models/OwnerProfile';
+import mongoose from 'mongoose';
 
 const router = express.Router();
 
@@ -8,9 +11,9 @@ const router = express.Router();
 router.get('/', async (req: Request, res: Response) => {
   try {
     const { role } = req.query;
-    const users: User[] = [];
+    const users: any[] = [];
     
-    const snapshot = await mockDb.collection('users').get();
+    const snapshot = await db.collection('users').get();
     snapshot.forEach((doc: any) => {
       users.push(doc.data());
     });
@@ -39,7 +42,7 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const doc = await mockDb.collection('users').doc(id).get();
+    const doc = await db.collection('users').doc(id).get();
 
     if (!doc.exists) {
       return res.status(404).json({
@@ -66,7 +69,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     const updates = req.body;
 
-    const doc = await mockDb.collection('users').doc(id).get();
+    const doc = await db.collection('users').doc(id).get();
     if (!doc.exists) {
       return res.status(404).json({
         success: false,
@@ -74,9 +77,9 @@ router.put('/:id', async (req: Request, res: Response) => {
       });
     }
 
-    await mockDb.collection('users').doc(id).update(updates);
+    await db.collection('users').doc(id).update(updates);
 
-    const updatedDoc = await mockDb.collection('users').doc(id).get();
+    const updatedDoc = await db.collection('users').doc(id).get();
 
     res.json({
       success: true,
@@ -95,7 +98,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 router.get('/student/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const doc = await mockDb.collection('studentProfiles').doc(id).get();
+    const doc = await db.collection('studentProfiles').doc(id).get();
 
     if (!doc.exists) {
       return res.status(404).json({
@@ -122,7 +125,7 @@ router.put('/student/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     const updates = req.body;
 
-    const doc = await mockDb.collection('studentProfiles').doc(id).get();
+    const doc = await db.collection('studentProfiles').doc(id).get();
     if (!doc.exists) {
       return res.status(404).json({
         success: false,
@@ -130,9 +133,9 @@ router.put('/student/:id', async (req: Request, res: Response) => {
       });
     }
 
-    await mockDb.collection('studentProfiles').doc(id).update(updates);
+    await db.collection('studentProfiles').doc(id).update(updates);
 
-    const updatedDoc = await mockDb.collection('studentProfiles').doc(id).get();
+    const updatedDoc = await db.collection('studentProfiles').doc(id).get();
 
     res.json({
       success: true,
@@ -151,7 +154,7 @@ router.put('/student/:id', async (req: Request, res: Response) => {
 router.get('/owner/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const doc = await mockDb.collection('ownerProfiles').doc(id).get();
+    const doc = await db.collection('ownerProfiles').doc(id).get();
 
     if (!doc.exists) {
       return res.status(404).json({
@@ -178,7 +181,7 @@ router.put('/owner/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     const updates = req.body;
 
-    const doc = await mockDb.collection('ownerProfiles').doc(id).get();
+    const doc = await db.collection('ownerProfiles').doc(id).get();
     if (!doc.exists) {
       return res.status(404).json({
         success: false,
@@ -186,9 +189,9 @@ router.put('/owner/:id', async (req: Request, res: Response) => {
       });
     }
 
-    await mockDb.collection('ownerProfiles').doc(id).update(updates);
+    await db.collection('ownerProfiles').doc(id).update(updates);
 
-    const updatedDoc = await mockDb.collection('ownerProfiles').doc(id).get();
+    const updatedDoc = await db.collection('ownerProfiles').doc(id).get();
 
     res.json({
       success: true,
@@ -208,7 +211,7 @@ router.get('/roommates/all', async (req: Request, res: Response) => {
   try {
     const profiles: any[] = [];
     
-    const snapshot = await mockDb.collection('roommateProfiles').get();
+    const snapshot = await db.collection('roommateProfiles').get();
     snapshot.forEach((doc: any) => {
       profiles.push(doc.data());
     });
@@ -226,5 +229,4 @@ router.get('/roommates/all', async (req: Request, res: Response) => {
 });
 
 export default router;
-
 

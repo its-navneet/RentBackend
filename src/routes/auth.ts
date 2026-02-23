@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
-import mockAuth from '../services/mockAuth';
-import mockDb from '../services/mockDb';
+import auth from '../services/auth';
+import db from '../services/db';
+import mongoose from 'mongoose';
 import { log } from 'console';
 
 const router = express.Router();
@@ -24,25 +25,30 @@ router.post('/register', async (req: Request, res: Response) => {
       });
     }
 
-    const result = await mockAuth.createUserWithEmailAndPassword(email, password);
+    const result = await auth.createUserWithEmailAndPassword(email, password);
     
-    // Create user profile
+    const userId = result.user.uid;
+    
+    // Create user profile in MongoDB
     const userData = {
-      id: result.user.uid,
+      _id: new mongoose.Types.ObjectId(userId),
+      id: userId,
       email,
       name,
       phone: phone || '',
       role,
       createdAt: new Date(),
       verified: false,
+      password: '', // Don't store password in profile
     };
 
-    await mockDb.collection('users').doc(result.user.uid).set(userData);
+    await db.collection('users').doc(userId).set({ ...userData, password: '' });
 
     // Create role-specific profile
     if (role === 'student') {
-      await mockDb.collection('studentProfiles').doc(result.user.uid).set({
+      await db.collection('studentProfiles').doc(userId).set({
         ...userData,
+        userId: userId,
         branch: '',
         college: '',
         diet: 'veg',
@@ -55,8 +61,9 @@ router.post('/register', async (req: Request, res: Response) => {
         },
       });
     } else if (role === 'owner') {
-      await mockDb.collection('ownerProfiles').doc(result.user.uid).set({
+      await db.collection('ownerProfiles').doc(userId).set({
         ...userData,
+        userId: userId,
         businessName: '',
         properties: [],
         backgroundCheckComplete: false,
@@ -94,10 +101,10 @@ router.post('/login', async (req: Request, res: Response) => {
       });
     }
 
-    const result = await mockAuth.signInWithEmailAndPassword(email, password);
+    const result = await auth.signInWithEmailAndPassword(email, password);
 
     // Get user profile
-    const userDoc = await mockDb.collection('users').doc(result.user.uid).get();
+    const userDoc = await db.collection('users').doc(result.user.uid).get();
     const userData = userDoc.data();
 
     res.json({
@@ -107,6 +114,7 @@ router.post('/login', async (req: Request, res: Response) => {
         email: result.user.email,
         role: userData?.role,
         name: userData?.name,
+        token: result.token,
       },
       message: 'Login successful',
     });
@@ -121,7 +129,7 @@ router.post('/login', async (req: Request, res: Response) => {
 // POST /api/auth/logout
 router.post('/logout', async (req: Request, res: Response) => {
   try {
-    await mockAuth.signOut();
+    await auth.signOut();
     res.json({
       success: true,
       message: 'Logged out successfully',
@@ -137,16 +145,26 @@ router.post('/logout', async (req: Request, res: Response) => {
 // GET /api/auth/me
 router.get('/me', async (req: Request, res: Response) => {
   try {
-    const currentUser = mockAuth.getCurrentUser();
-    
-    if (!currentUser) {
+    // Get token from header
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({
         success: false,
         error: 'Not authenticated',
       });
     }
 
-    const userDoc = await mockDb.collection('users').doc(currentUser.uid).get();
+    const token = authHeader.split(' ')[1];
+    const currentUser = auth.verifyToken(token);
+    
+    if (!currentUser) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid token',
+      });
+    }
+
+    const userDoc = await db.collection('users').doc(currentUser.uid).get();
     const userData = userDoc.data();
 
     if (!userData) {
@@ -180,7 +198,7 @@ router.put('/set-user', async (req: Request, res: Response) => {
       });
     }
 
-    mockAuth.setCurrentUser({ uid, email });
+    auth.setCurrentUser({ uid, email, role: 'student' });
     
     res.json({
       success: true,
@@ -195,5 +213,4 @@ router.put('/set-user', async (req: Request, res: Response) => {
 });
 
 export default router;
-
 

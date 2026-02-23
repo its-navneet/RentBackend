@@ -1,6 +1,8 @@
 import express, { Request, Response } from 'express';
-import mockDb from '../services/mockDb';
-import { Review } from '../types';
+import db from '../services/db';
+import { Review, IReview } from '../models/Review';
+import { Property } from '../models/Property';
+import mongoose from 'mongoose';
 
 const router = express.Router();
 
@@ -8,9 +10,9 @@ const router = express.Router();
 router.get('/', async (req: Request, res: Response) => {
   try {
     const { propertyId, userId } = req.query;
-    const reviews: Review[] = [];
+    const reviews: any[] = [];
     
-    const snapshot = await mockDb.collection('reviews').get();
+    const snapshot = await db.collection('reviews').get();
     snapshot.forEach((doc: any) => {
       reviews.push(doc.data());
     });
@@ -19,11 +21,11 @@ router.get('/', async (req: Request, res: Response) => {
     let filteredReviews = reviews;
     if (propertyId) {
       // Get property to check its reviews
-      const propertyDoc = await mockDb.collection('properties').doc(propertyId as string).get();
+      const propertyDoc = await db.collection('properties').doc(propertyId as string).get();
       if (propertyDoc.exists) {
         const propertyData = propertyDoc.data();
         const propertyReviewIds = propertyData?.reviews || [];
-        filteredReviews = filteredReviews.filter(r => propertyReviewIds.includes(r.id));
+        filteredReviews = filteredReviews.filter(r => propertyReviewIds.includes(r.id || r._id));
       }
     }
     if (userId) {
@@ -46,7 +48,7 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const doc = await mockDb.collection('reviews').doc(id).get();
+    const doc = await db.collection('reviews').doc(id).get();
 
     if (!doc.exists) {
       return res.status(404).json({
@@ -80,7 +82,7 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     // Check if property exists
-    const propertyDoc = await mockDb.collection('properties').doc(propertyId).get();
+    const propertyDoc = await db.collection('properties').doc(propertyId).get();
     if (!propertyDoc.exists) {
       return res.status(404).json({
         success: false,
@@ -88,10 +90,9 @@ router.post('/', async (req: Request, res: Response) => {
       });
     }
 
-    const id = 'review_' + Date.now();
-    const review: Review = {
-      id,
-      userId,
+    const review = new Review({
+      propertyId: new mongoose.Types.ObjectId(propertyId),
+      userId: new mongoose.Types.ObjectId(userId),
       userName: userName || 'Anonymous',
       rating,
       safetyRating: safetyRating || rating,
@@ -99,26 +100,28 @@ router.post('/', async (req: Request, res: Response) => {
       entryAccess: entryAccess || rating,
       wardenPresence: wardenPresence || rating,
       comment: comment || '',
-      createdAt: new Date(),
-    };
+    });
 
-    await mockDb.collection('reviews').doc(id).set(review);
+    await review.save();
 
     // Update property's reviews array
     const propertyData = propertyDoc.data();
-    await mockDb.collection('properties').doc(propertyId).update({
-      reviews: [...(propertyData?.reviews || []), id],
+    const reviews = propertyData?.reviews || [];
+    await db.collection('properties').doc(propertyId).update({
+      reviews: [...reviews, review._id.toString()],
     });
 
     // Recalculate average safety rating
-    const reviews: any[] = [];
-    const reviewsSnapshot = await mockDb.collection('reviews').get();
+    const allReviews: any[] = [];
+    const reviewsSnapshot = await db.collection('reviews').get();
     reviewsSnapshot.forEach((doc: any) => {
-      reviews.push(doc.data());
+      allReviews.push(doc.data());
     });
-    const propertyReviews = reviews.filter(r => (propertyData?.reviews || []).includes(r.id));
-    const avgSafetyRating = propertyReviews.reduce((sum, r) => sum + r.safetyRating, 0) / propertyReviews.length;
-    await mockDb.collection('properties').doc(propertyId).update({
+    const propertyReviews = allReviews.filter(r => reviews.includes(r.id || r._id));
+    const avgSafetyRating = propertyReviews.length > 0 
+      ? propertyReviews.reduce((sum, r) => sum + (r.safetyRating || r.rating), 0) / propertyReviews.length 
+      : 0;
+    await db.collection('properties').doc(propertyId).update({
       safetyRating: Math.round(avgSafetyRating * 10) / 10,
     });
 
@@ -141,7 +144,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     const updates = req.body;
 
-    const doc = await mockDb.collection('reviews').doc(id).get();
+    const doc = await db.collection('reviews').doc(id).get();
     if (!doc.exists) {
       return res.status(404).json({
         success: false,
@@ -149,13 +152,22 @@ router.put('/:id', async (req: Request, res: Response) => {
       });
     }
 
-    await mockDb.collection('reviews').doc(id).update(updates);
+    const review = await Review.findByIdAndUpdate(
+      id,
+      updates,
+      { new: true }
+    );
 
-    const updatedDoc = await mockDb.collection('reviews').doc(id).get();
+    if (!review) {
+      return res.status(404).json({
+        success: false,
+        error: 'Review not found',
+      });
+    }
 
     res.json({
       success: true,
-      data: updatedDoc.data(),
+      data: review,
       message: 'Review updated successfully',
     });
   } catch (error: any) {
@@ -171,7 +183,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    const doc = await mockDb.collection('reviews').doc(id).get();
+    const doc = await db.collection('reviews').doc(id).get();
     if (!doc.exists) {
       return res.status(404).json({
         success: false,
@@ -181,15 +193,16 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
     const reviewData = doc.data();
 
-    await mockDb.collection('reviews').doc(id).delete();
+    await Review.findByIdAndDelete(id);
 
     // Update property's reviews array
     if (reviewData?.propertyId) {
-      const propertyDoc = await mockDb.collection('properties').doc(reviewData.propertyId).get();
+      const propertyDoc = await db.collection('properties').doc(reviewData.propertyId).get();
       if (propertyDoc.exists) {
         const propertyData = propertyDoc.data();
-        await mockDb.collection('properties').doc(reviewData.propertyId).update({
-          reviews: (propertyData?.reviews || []).filter((rId: string) => rId !== id),
+        const reviews = propertyData?.reviews || [];
+        await db.collection('properties').doc(reviewData.propertyId).update({
+          reviews: reviews.filter((rId: string) => rId !== id),
         });
       }
     }
@@ -207,5 +220,4 @@ router.delete('/:id', async (req: Request, res: Response) => {
 });
 
 export default router;
-
 

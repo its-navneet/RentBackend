@@ -10,6 +10,9 @@ import bookingRoutes from "./routes/bookings";
 import reviewRoutes from "./routes/reviews";
 import agreementRoutes from "./routes/agreements";
 
+// Import MongoDB connection
+import { connectDB } from "./db/mongodb";
+
 // Load environment variables
 dotenv.config();
 
@@ -68,13 +71,20 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`
+// Start server with MongoDB connection
+const startServer = async () => {
+  try {
+    // Connect to MongoDB
+    await connectDB();
+    
+    // Start Express server
+    app.listen(PORT, () => {
+      console.log(`
 ╔═══════════════════════════════════════════════════════════════╗
 ║                    Rent Backend Server                         ║
 ║                                                               ║
 ║   Server running on http://localhost:${PORT}                     ║
+║   MongoDB: Connected                                          ║
 ║                                                               ║
 ║   Available API Endpoints:                                    ║
 ║   - GET  /health                      Health check            ║
@@ -111,7 +121,14 @@ app.listen(PORT, () => {
 ║   - PUT  /api/agreements/:id/sign     Sign agreement       ║
 ║   - DELETE /api/agreements/:id        Delete agreement     ║
 ╚═══════════════════════════════════════════════════════════════╝
-  `);
-});
+      `);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+startServer();
 
 export default app;

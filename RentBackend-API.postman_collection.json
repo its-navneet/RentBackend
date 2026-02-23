@@ -1,0 +1,607 @@
+{
+  "info": {
+    "name": "Rent Backend API",
+    "description": "REST APIs for rental property management",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api",
+      "type": "string"
+    },
+    {
+      "key": "userUid",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/register",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"student@test.com\",\n  \"password\": \"password123\",\n  \"role\": \"student\",\n  \"name\": \"John Doe\",\n  \"phone\": \"1234567890\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/login",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"student@test.com\",\n  \"password\": \"password123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/logout",
+            "header": []
+          }
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/auth/me",
+            "header": []
+          }
+        },
+        {
+          "name": "Set User (for testing)",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/auth/set-user",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"uid\": \"user_123\",\n  \"email\": \"student@test.com\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Properties",
+      "item": [
+        {
+          "name": "Get All Properties",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/properties?city=&type=&minBudget=&maxBudget=&bedrooms=&page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "properties"
+              ],
+              "query": [
+                {
+                  "key": "city",
+                  "value": ""
+                },
+                {
+                  "key": "type",
+                  "value": ""
+                },
+                {
+                  "key": "minBudget",
+                  "value": ""
+                },
+                {
+                  "key": "maxBudget",
+                  "value": ""
+                },
+                {
+                  "key": "bedrooms",
+                  "value": ""
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "Get Property by ID",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/properties/prop_123",
+            "header": []
+          }
+        },
+        {
+          "name": "Create Property",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/properties",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ownerId\": \"user_123\",\n  \"title\": \"Beautiful Apartment\",\n  \"address\": \"123 Main St\",\n  \"city\": \"New York\",\n  \"state\": \"NY\",\n  \"zipCode\": \"10001\",\n  \"type\": \"apartment\",\n  \"bedrooms\": 2,\n  \"bathrooms\": 1,\n  \"budget\": {\n    \"min\": 1000,\n    \"max\": 1500\n  },\n  \"amenities\": [\"wifi\", \"parking\", \"laundry\"],\n  \"images\": [],\n  \"description\": \"A nice apartment in the city\",\n  \"latitude\": 40.7128,\n  \"longitude\": -74.0060,\n  \"verified\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Property",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/properties/prop_123",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Title\",\n  \"budget\": {\n    \"min\": 1200,\n    \"max\": 1800\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Property",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/properties/prop_123",
+            "header": []
+          }
+        },
+        {
+          "name": "Get Properties by Owner",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/properties/owner/user_123",
+            "header": []
+          }
+        },
+        {
+          "name": "Get Nearby Properties",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/properties/search/nearby?latitude=40.7128&longitude=-74.0060&radius=5000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "properties",
+                "search",
+                "nearby"
+              ],
+              "query": [
+                {
+                  "key": "latitude",
+                  "value": "40.7128"
+                },
+                {
+                  "key": "longitude",
+                  "value": "-74.006"
+                },
+                {
+                  "key": "radius",
+                  "value": "5000"
+                }
+              ]
+            },
+            "header": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/users",
+            "header": []
+          }
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/users/user_123",
+            "header": []
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/users/user_123",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\",\n  \"phone\": \"9876543210\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Student Profile",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/users/student/user_123",
+            "header": []
+          }
+        },
+        {
+          "name": "Update Student Profile",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/users/student/user_123",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"branch\": \"Computer Science\",\n  \"college\": \"MIT\",\n  \"diet\": \"non-veg\",\n  \"preferences\": {\n    \"budget\": { \"min\": 500, \"max\": 2000 },\n    \"roomType\": \"shared\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Owner Profile",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/users/owner/user_123",
+            "header": []
+          }
+        },
+        {
+          "name": "Update Owner Profile",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/users/owner/user_123",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"businessName\": \"ABC Rentals\",\n  \"backgroundCheckComplete\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Get All Roommate Profiles",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/users/roommates/all",
+            "header": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bookings",
+      "item": [
+        {
+          "name": "Get All Bookings",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/bookings?studentId=&ownerId=&propertyId=&status=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings"
+              ],
+              "query": [
+                {
+                  "key": "studentId",
+                  "value": ""
+                },
+                {
+                  "key": "ownerId",
+                  "value": ""
+                },
+                {
+                  "key": "propertyId",
+                  "value": ""
+                },
+                {
+                  "key": "status",
+                  "value": ""
+                }
+              ]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "Get Booking by ID",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/bookings/booking_123",
+            "header": []
+          }
+        },
+        {
+          "name": "Create Booking",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/bookings",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"propertyId\": \"prop_123\",\n  \"studentId\": \"user_123\",\n  \"visitDate\": \"2024-12-25\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Booking",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/bookings/booking_123",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ownerResponse\": \"accepted\",\n  \"status\": \"confirmed\",\n  \"visitDate\": \"2024-12-26\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Cancel Booking",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/bookings/booking_123",
+            "header": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reviews",
+      "item": [
+        {
+          "name": "Get All Reviews",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/reviews?propertyId=&userId=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reviews"
+              ],
+              "query": [
+                {
+                  "key": "propertyId",
+                  "value": ""
+                },
+                {
+                  "key": "userId",
+                  "value": ""
+                }
+              ]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "Get Review by ID",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/reviews/review_123",
+            "header": []
+          }
+        },
+        {
+          "name": "Create Review",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/reviews",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"propertyId\": \"prop_123\",\n  \"userId\": \"user_123\",\n  \"userName\": \"John Doe\",\n  \"rating\": 4,\n  \"safetyRating\": 5,\n  \"lighting\": 4,\n  \"entryAccess\": 3,\n  \"wardenPresence\": 4,\n  \"comment\": \"Great place to live!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Review",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/reviews/review_123",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rating\": 5,\n  \"comment\": \"Updated comment\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Review",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/reviews/review_123",
+            "header": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "Agreements",
+      "item": [
+        {
+          "name": "Get All Agreements",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/agreements?studentId=&ownerId=&propertyId=&status=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "agreements"
+              ],
+              "query": [
+                {
+                  "key": "studentId",
+                  "value": ""
+                },
+                {
+                  "key": "ownerId",
+                  "value": ""
+                },
+                {
+                  "key": "propertyId",
+                  "value": ""
+                },
+                {
+                  "key": "status",
+                  "value": ""
+                }
+              ]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "Get Agreement by ID",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/agreements/agreement_123",
+            "header": []
+          }
+        },
+        {
+          "name": "Create Agreement",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/agreements",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"propertyId\": \"prop_123\",\n  \"studentId\": \"user_123\",\n  \"ownerId\": \"owner_123\",\n  \"moveInDate\": \"2024-01-01\",\n  \"duration\": 12,\n  \"depositAmount\": 2000,\n  \"monthlyRent\": 1500,\n  \"customClauses\": [\"No pets allowed\"]\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Agreement",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/agreements/agreement_123",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"monthlyRent\": 1600\n}"
+            }
+          }
+        },
+        {
+          "name": "Sign Agreement",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/agreements/agreement_123/sign",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"signedBy\": \"student\",\n  \"signature\": \"John Doe signature\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Agreement",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/agreements/agreement_123",
+            "header": []
+          }
+        }
+      ]
+    }
+  ]
+}
+

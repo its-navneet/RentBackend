@@ -1,6 +1,8 @@
 import express, { Request, Response } from 'express';
-import mockDb from '../services/mockDb';
-import { Booking } from '../types';
+import db from '../services/db';
+import { Booking, IBooking } from '../models/Booking';
+import { Property } from '../models/Property';
+import mongoose from 'mongoose';
 
 const router = express.Router();
 
@@ -8,9 +10,9 @@ const router = express.Router();
 router.get('/', async (req: Request, res: Response) => {
   try {
     const { studentId, ownerId, propertyId, status } = req.query;
-    const bookings: Booking[] = [];
+    const bookings: any[] = [];
     
-    const snapshot = await mockDb.collection('bookings').get();
+    const snapshot = await db.collection('bookings').get();
     snapshot.forEach((doc: any) => {
       bookings.push(doc.data());
     });
@@ -23,7 +25,7 @@ router.get('/', async (req: Request, res: Response) => {
     if (ownerId) {
       // Get properties owned by this owner
       const properties: any[] = [];
-      const propSnapshot = await mockDb.collection('properties').where('ownerId', '==', ownerId).get();
+      const propSnapshot = await db.collection('properties').where('ownerId', '==', ownerId).get();
       propSnapshot.forEach((doc: any) => {
         properties.push(doc.data());
       });
@@ -53,7 +55,7 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const doc = await mockDb.collection('bookings').doc(id).get();
+    const doc = await db.collection('bookings').doc(id).get();
 
     if (!doc.exists) {
       return res.status(404).json({
@@ -87,7 +89,7 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     // Check if property exists
-    const propertyDoc = await mockDb.collection('properties').doc(propertyId).get();
+    const propertyDoc = await db.collection('properties').doc(propertyId).get();
     if (!propertyDoc.exists) {
       return res.status(404).json({
         success: false,
@@ -95,18 +97,15 @@ router.post('/', async (req: Request, res: Response) => {
       });
     }
 
-    const id = 'booking_' + Date.now();
-    const booking: Booking = {
-      id,
-      propertyId,
-      studentId,
+    const booking = new Booking({
+      propertyId: new mongoose.Types.ObjectId(propertyId),
+      studentId: new mongoose.Types.ObjectId(studentId),
       ownerResponse: 'pending',
       visitDate: new Date(visitDate),
       status: 'pending',
-      createdAt: new Date(),
-    };
+    });
 
-    await mockDb.collection('bookings').doc(id).set(booking);
+    await booking.save();
 
     res.status(201).json({
       success: true,
@@ -127,7 +126,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     const { ownerResponse, status, visitDate } = req.body;
 
-    const doc = await mockDb.collection('bookings').doc(id).get();
+    const doc = await db.collection('bookings').doc(id).get();
     if (!doc.exists) {
       return res.status(404).json({
         success: false,
@@ -140,13 +139,22 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (status) updates.status = status;
     if (visitDate) updates.visitDate = new Date(visitDate);
 
-    await mockDb.collection('bookings').doc(id).update(updates);
+    const booking = await Booking.findByIdAndUpdate(
+      id,
+      updates,
+      { new: true }
+    );
 
-    const updatedDoc = await mockDb.collection('bookings').doc(id).get();
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        error: 'Booking not found',
+      });
+    }
 
     res.json({
       success: true,
-      data: updatedDoc.data(),
+      data: booking,
       message: 'Booking updated successfully',
     });
   } catch (error: any) {
@@ -162,7 +170,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    const doc = await mockDb.collection('bookings').doc(id).get();
+    const doc = await db.collection('bookings').doc(id).get();
     if (!doc.exists) {
       return res.status(404).json({
         success: false,
@@ -170,7 +178,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       });
     }
 
-    await mockDb.collection('bookings').doc(id).delete();
+    await Booking.findByIdAndDelete(id);
 
     res.json({
       success: true,
@@ -185,5 +193,4 @@ router.delete('/:id', async (req: Request, res: Response) => {
 });
 
 export default router;
-
 
