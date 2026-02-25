@@ -1,6 +1,10 @@
+// Load environment variables FIRST before any imports
+import dotenv from "dotenv";
+dotenv.config();
+
 import express, { Express, Request, Response, NextFunction } from "express";
 import cors from "cors";
-import dotenv from "dotenv";
+import path from "path";
 
 // Import routes
 import authRoutes from "./routes/auth";
@@ -9,12 +13,10 @@ import userRoutes from "./routes/users";
 import bookingRoutes from "./routes/bookings";
 import reviewRoutes from "./routes/reviews";
 import agreementRoutes from "./routes/agreements";
+import uploadRoutes from "./routes/upload";
 
 // Import MongoDB connection
 import { connectDB } from "./db/mongodb";
-
-// Load environment variables
-dotenv.config();
 
 const app: Express = express();
 const PORT = process.env.PORT || 3000;
@@ -23,6 +25,9 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Serve uploaded files statically (for local storage fallback)
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Request logging middleware
 app.use((req: Request, res: Response, next: NextFunction) => {
@@ -48,6 +53,7 @@ app.get("/health", (req: Request, res: Response) => {
 
 // API Routes
 app.use("/api/auth", authRoutes);
+app.use("/api/upload", uploadRoutes);
 app.use("/api/properties", propertyRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/bookings", bookingRoutes);
@@ -79,56 +85,13 @@ const startServer = async () => {
     
     // Start Express server
     app.listen(PORT, () => {
-      console.log(`
-╔═══════════════════════════════════════════════════════════════╗
-║                    Rent Backend Server                         ║
-║                                                               ║
-║   Server running on http://localhost:${PORT}                     ║
-║   MongoDB: Connected                                          ║
-║                                                               ║
-║   Available API Endpoints:                                    ║
-║   - GET  /health                      Health check            ║
-║   - POST /api/auth/register           Register user          ║
-║   - POST /api/auth/login              Login                  ║
-║   - POST /api/auth/logout            Logout                 ║
-║   - GET  /api/auth/me                Get current user       ║
-║   - GET  /api/properties              Get all properties    ║
-║   - GET  /api/properties/:id          Get property by ID    ║
-║   - POST /api/properties              Create property       ║
-║   - PUT  /api/properties/:id          Update property       ║
-║   - DELETE /api/properties/:id        Delete property       ║
-║   - GET  /api/users                   Get all users         ║
-║   - GET  /api/users/:id               Get user by ID        ║
-║   - PUT  /api/users/:id               Update user           ║
-║   - GET  /api/users/student/:id       Get student profile  ║
-║   - PUT  /api/users/student/:id       Update student profile║
-║   - GET  /api/users/owner/:id         Get owner profile    ║
-║   - PUT  /api/users/owner/:id         Update owner profile ║
-║   - GET  /api/bookings                Get all bookings      ║
-║   - GET  /api/bookings/:id            Get booking by ID     ║
-║   - POST /api/bookings                Create booking        ║
-║   - PUT  /api/bookings/:id            Update booking        ║
-║   - DELETE /api/bookings/:id          Delete booking        ║
-║   - GET  /api/reviews                 Get all reviews       ║
-║   - GET  /api/reviews/:id             Get review by ID     ║
-║   - POST /api/reviews                 Create review         ║
-║   - PUT  /api/reviews/:id             Update review        ║
-║   - DELETE /api/reviews/:id           Delete review        ║
-║   - GET  /api/agreements              Get all agreements   ║
-║   - GET  /api/agreements/:id          Get agreement by ID  ║
-║   - POST /api/agreements              Create agreement      ║
-║   - PUT  /api/agreements/:id          Update agreement     ║
-║   - PUT  /api/agreements/:id/sign     Sign agreement       ║
-║   - DELETE /api/agreements/:id        Delete agreement     ║
-╚═══════════════════════════════════════════════════════════════╝
-      `);
+      console.log(`server is running on port ${PORT}`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);
     process.exit(1);
   }
 };
-
 startServer();
 
 export default app;

@@ -11,7 +11,11 @@ router.post('/register', async (req: Request, res: Response) => {
   try {
     const { email, password, role, name, phone } = req.body;
     
-    if (!email || !password || !role || !name) {
+    // More robust validation - check for empty strings and invalid values
+    if (!email || typeof email !== 'string' || email.trim() === '' ||
+        !password || typeof password !== 'string' || password.trim() === '' ||
+        !role || typeof role !== 'string' || role.trim() === '' ||
+        !name || typeof name !== 'string' || name.trim() === '') {
       return res.status(400).json({
         success: false,
         error: 'Email, password, role, and name are required',
@@ -25,7 +29,7 @@ router.post('/register', async (req: Request, res: Response) => {
       });
     }
 
-    const result = await auth.createUserWithEmailAndPassword(email, password);
+    const result = await auth.createUserWithEmailAndPassword(email, password, name, phone, role);
     
     const userId = result.user.uid;
     
@@ -39,10 +43,10 @@ router.post('/register', async (req: Request, res: Response) => {
       role,
       createdAt: new Date(),
       verified: false,
-      password: '', // Don't store password in profile
     };
 
-    await db.collection('users').doc(userId).set({ ...userData, password: '' });
+    // Don't override the user document - it's already created by auth service with hashed password
+    // await db.collection('users').doc(userId).set({ ...userData, password: '' });
 
     // Create role-specific profile
     if (role === 'student') {

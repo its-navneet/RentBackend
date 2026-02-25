@@ -6,9 +6,10 @@
 import mongoose from 'mongoose';
 import { log } from 'console';
 
-const MONGODB_URI = "mongodb+srv://admin:navneet@cluster0.juvuasp.mongodb.net/?appName=Cluster0";
+const MONGODB_URI = "mongodb+srv://admin:navneet@cluster0.juvuasp.mongodb.net/?appName=Cluster0"
 
 export const connectDB = async (): Promise<void> => {
+
   try {
     console.log("mongo_url", MONGODB_URI);
     const conn = await mongoose.connect(MONGODB_URI);

@@ -8,6 +8,7 @@ import bcrypt from 'bcryptjs';
 import { User, IUser } from '../models/User';
 import { StudentProfile } from '../models/StudentProfile';
 import { OwnerProfile } from '../models/OwnerProfile';
+import { log } from 'node:console';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
@@ -23,7 +24,22 @@ let currentUser: AuthUser | null = null;
 
 export const auth = {
   // Create a new user with email and password
-  createUserWithEmailAndPassword: async (email: string, password: string) => {
+  createUserWithEmailAndPassword: async (email: string, password: string, name: string, phone: string, role: string = 'student') => {
+    console.log('Creating user with email:', email, 'role:', role, 'name:', name, 'phone:', phone, "password:", password);
+    // Validate input
+    if (!email || typeof email !== 'string' || email.trim() === '') {
+      throw new Error('Email is required');
+    }
+    if (!password || typeof password !== 'string' || password.trim() === '') {
+      throw new Error('Password is required');
+    }
+    if (!name || typeof name !== 'string' || name.trim() === '') {
+      throw new Error('Name is required');
+    }
+    if (!role || typeof role !== 'string' || role.trim() === '') {
+      throw new Error('Role is required');
+    }
+
     // Check if user already exists
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
@@ -38,9 +54,9 @@ export const auth = {
     const user = new User({
       email: email.toLowerCase(),
       password: hashedPassword,
-      name: '',
-      phone: '',
-      role: 'student', // Default role, will be updated
+      name: name.trim(),
+      phone: phone ? phone.trim() : '',
+      role: role.trim(),
       verified: false,
     });
 
