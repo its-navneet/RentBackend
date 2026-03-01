@@ -5,6 +5,7 @@ dotenv.config();
 import express, { Express, Request, Response, NextFunction } from "express";
 import cors from "cors";
 import path from "path";
+import http from "http";
 
 // Import routes
 import authRoutes from "./routes/auth";
@@ -14,12 +15,18 @@ import bookingRoutes from "./routes/bookings";
 import reviewRoutes from "./routes/reviews";
 import agreementRoutes from "./routes/agreements";
 import uploadRoutes from "./routes/upload";
+import messagesRoutes from "./routes/messages";
 
 // Import MongoDB connection
 import { connectDB } from "./db/mongodb";
+import { WebSocketService } from "./services/websocket";
 
 const app: Express = express();
+const httpServer = http.createServer(app);
 const PORT = process.env.PORT || 3000;
+
+// Initialize WebSocket
+const wsService = new WebSocketService(httpServer);
 
 // Middleware
 app.use(cors());
@@ -53,12 +60,13 @@ app.get("/health", (req: Request, res: Response) => {
 
 // API Routes
 app.use("/api/auth", authRoutes);
-app.use("/api/upload", uploadRoutes);
 app.use("/api/properties", propertyRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/agreements", agreementRoutes);
+app.use("/api/upload", uploadRoutes);
+app.use("/api/messages", messagesRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {
@@ -83,9 +91,10 @@ const startServer = async () => {
     // Connect to MongoDB
     await connectDB();
     
-    // Start Express server
-    app.listen(PORT, () => {
+    // Start Express server with WebSocket
+    httpServer.listen(PORT, () => {
       console.log(`server is running on port ${PORT}`);
+      console.log(`WebSocket server ready`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);

@@ -1,10 +1,54 @@
 import express, { Request, Response } from 'express';
-import db from '../services/db';
 import { Property, IProperty } from '../models/Property';
 import { OwnerProfile } from '../models/OwnerProfile';
 import mongoose from 'mongoose';
+import { generateReadPresignedUrl } from '../services/upload';
 
 const router = express.Router();
+
+const isHttpUrl = (value: string): boolean => /^https?:\/\//i.test(value);
+
+const resolveReadUrl = async (value: string): Promise<string> => {
+  if (!value || isHttpUrl(value)) {
+    return value;
+  }
+
+  try {
+    return await generateReadPresignedUrl(value);
+  } catch {
+    // Fallback to raw value so one failed key does not break full property response
+    return value;
+  }
+};
+
+// Helper function to convert S3 keys to presigned URLs
+async function convertKeysToUrls(property: any): Promise<any> {
+  const propertyObj = property.toObject ? property.toObject() : property;
+  
+  // Convert photos array (S3 keys to presigned URLs)
+  if (Array.isArray(propertyObj.photos) && propertyObj.photos.length > 0) {
+    propertyObj.photos = await Promise.all(
+      propertyObj.photos.map((key: string) => resolveReadUrl(key))
+    );
+  }
+  
+  // Convert categorizedImages object (keys to presigned URLs)
+  if (propertyObj.categorizedImages && typeof propertyObj.categorizedImages === 'object') {
+    const categorizedUrls: any = {};
+    for (const [category, keys] of Object.entries(propertyObj.categorizedImages)) {
+      if (Array.isArray(keys)) {
+        categorizedUrls[category] = await Promise.all(
+          keys.map((key: string) => resolveReadUrl(key as string))
+        );
+      } else {
+        categorizedUrls[category] = keys;
+      }
+    }
+    propertyObj.categorizedImages = categorizedUrls;
+  }
+  
+  return propertyObj;
+}
 
 // GET /api/properties - Get all properties
 router.get('/', async (req: Request, res: Response) => {
@@ -23,65 +67,55 @@ router.get('/', async (req: Request, res: Response) => {
       sortOrder = 'desc'
     } = req.query;
 
-    let properties: any[] = [];
-    const snapshot = await db.collection('properties').get();
-    
-    snapshot.forEach((doc: any) => {
-      properties.push(doc.data());
-    });
-
-    // Apply filters
+    // Build MongoDB query
+    const query: any = {};
     if (city) {
-      properties = properties.filter(p => p.city?.toLowerCase().includes((city as string).toLowerCase()));
+      query.city = { $regex: city, $options: 'i' };
     }
     if (type) {
-      properties = properties.filter(p => p.type === type);
+      query.type = type;
     }
-    if (minBudget) {
-      properties = properties.filter(p => p.budget?.min >= Number(minBudget));
-    }
-    if (maxBudget) {
-      properties = properties.filter(p => p.budget?.max <= Number(maxBudget));
+    if (minBudget || maxBudget) {
+      query.$and = query.$and || [];
+      if (minBudget) query.$and.push({ 'budget.min': { $gte: Number(minBudget) } });
+      if (maxBudget) query.$and.push({ 'budget.max': { $lte: Number(maxBudget) } });
     }
     if (bedrooms) {
-      properties = properties.filter(p => p.bedrooms >= Number(bedrooms));
+      query.bedrooms = { $gte: Number(bedrooms) };
     }
     if (amenities) {
-      const amenityList = (amenities as string).split(',');
-      properties = properties.filter(p => 
-        amenityList.every(a => p.amenities?.includes(a.trim()))
-      );
+      const amenityList = (amenities as string).split(',').map(a => a.trim());
+      query.amenities = { $all: amenityList };
     }
     if (verified !== undefined) {
-      properties = properties.filter(p => p.verified === (verified === 'true'));
+      query.verified = verified === 'true';
     }
 
-    // Sort
-    const sortField = sortBy as string;
-    properties.sort((a: any, b: any) => {
-      const aVal = a[sortField];
-      const bVal = b[sortField];
-      if (!aVal || !bVal) return 0;
-      if (sortOrder === 'desc') {
-        return aVal > bVal ? -1 : aVal < bVal ? 1 : 0;
-      }
-      return aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-    });
-
-    // Paginate
+    // Fetch from MongoDB
     const pageNum = Number(page);
     const limitNum = Number(limit);
-    const startIndex = (pageNum - 1) * limitNum;
-    const endIndex = startIndex + limitNum;
-    const paginatedProperties = properties.slice(startIndex, endIndex);
+    const sortField = sortBy as string;
+    const sortDirection = sortOrder === 'desc' ? -1 : 1;
+
+    const properties = await Property.find(query)
+      .sort({ [sortField]: sortDirection })
+      .skip((pageNum - 1) * limitNum)
+      .limit(limitNum);
+
+    // Convert S3 keys to presigned URLs
+    const propertiesWithUrls = await Promise.all(
+      properties.map((prop) => convertKeysToUrls(prop))
+    );
+
+    const total = await Property.countDocuments(query);
 
     res.json({
       success: true,
-      data: paginatedProperties,
-      total: properties.length,
+      data: propertiesWithUrls,
+      total: total,
       page: pageNum,
       limit: limitNum,
-      totalPages: Math.ceil(properties.length / limitNum),
+      totalPages: Math.ceil(total / limitNum),
     });
   } catch (error: any) {
     res.status(500).json({
@@ -95,19 +129,27 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const doc = await db.collection('properties').doc(id).get();
+    const property = await Property.findById(id);
 
-    if (!doc.exists) {
+    if (!property) {
       return res.status(404).json({
         success: false,
         error: 'Property not found',
       });
     }
 
-    res.json({
+    // Convert S3 keys to presigned URLs
+    const propertyWithUrls = await convertKeysToUrls(property);
+
+    const responseJson = {
       success: true,
-      data: doc.data(),
-    });
+      data: propertyWithUrls,
+    };
+
+    console.log('=== Property Details Response ===');
+    console.log(JSON.stringify(responseJson, null, 2));
+
+    res.json(responseJson);
   } catch (error: any) {
     res.status(500).json({
       success: false,
@@ -120,6 +162,10 @@ router.get('/:id', async (req: Request, res: Response) => {
 router.post('/', async (req: Request, res: Response) => {
   try {
     const propertyData = req.body;
+    
+    console.log('=== Creating Property ===');
+    console.log('Photos:', propertyData.photos);
+    console.log('Categorized Images:', propertyData.categorizedImages);
     
     if (!propertyData.ownerId || !propertyData.title || !propertyData.address) {
       return res.status(400).json({
@@ -155,21 +201,21 @@ router.post('/', async (req: Request, res: Response) => {
 
     // Update owner's properties list
     try {
-      const ownerDoc = await db.collection('ownerProfiles').doc(propertyData.ownerId).get();
-      if (ownerDoc.exists) {
-        const ownerData = ownerDoc.data();
-        const properties = ownerData?.properties || [];
-        await db.collection('ownerProfiles').doc(propertyData.ownerId).update({
-          properties: [...properties, property._id.toString()],
-        });
-      }
+      await OwnerProfile.findByIdAndUpdate(
+        propertyData.ownerId,
+        { $push: { properties: property._id } },
+        { upsert: false }
+      );
     } catch (e) {
       console.log('Error updating owner profile:', e);
     }
 
+    // Convert S3 keys to presigned URLs before sending response
+    const propertyWithUrls = await convertKeysToUrls(property);
+
     res.status(201).json({
       success: true,
-      data: property,
+      data: propertyWithUrls,
       message: 'Property created successfully',
     });
   } catch (error: any) {
@@ -185,14 +231,6 @@ router.put('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const updates = req.body;
-
-    const doc = await db.collection('properties').doc(id).get();
-    if (!doc.exists) {
-      return res.status(404).json({
-        success: false,
-        error: 'Property not found',
-      });
-    }
 
     // Handle mongoose ObjectId for ownerId if present
     if (updates.ownerId) {
@@ -212,9 +250,12 @@ router.put('/:id', async (req: Request, res: Response) => {
       });
     }
 
+    // Convert S3 keys to presigned URLs before sending response
+    const propertyWithUrls = await convertKeysToUrls(property);
+
     res.json({
       success: true,
-      data: property,
+      data: propertyWithUrls,
       message: 'Property updated successfully',
     });
   } catch (error: any) {
@@ -230,29 +271,23 @@ router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    const doc = await db.collection('properties').doc(id).get();
-    if (!doc.exists) {
+    const property = await Property.findById(id);
+    if (!property) {
       return res.status(404).json({
         success: false,
         error: 'Property not found',
       });
     }
 
-    const propertyData = doc.data();
-
     await Property.findByIdAndDelete(id);
 
     // Update owner's properties list
-    if (propertyData?.ownerId) {
+    if (property.ownerId) {
       try {
-        const ownerDoc = await db.collection('ownerProfiles').doc(propertyData.ownerId).get();
-        if (ownerDoc.exists) {
-          const ownerData = ownerDoc.data();
-          const properties = (ownerData?.properties || []).filter((pId: string) => pId !== id);
-          await db.collection('ownerProfiles').doc(propertyData.ownerId).update({
-            properties,
-          });
-        }
+        await OwnerProfile.findByIdAndUpdate(
+          property.ownerId,
+          { $pull: { properties: property._id } }
+        );
       } catch (e) {
         console.log('Error updating owner profile:', e);
       }
@@ -274,16 +309,17 @@ router.delete('/:id', async (req: Request, res: Response) => {
 router.get('/owner/:ownerId', async (req: Request, res: Response) => {
   try {
     const { ownerId } = req.params;
-    const properties: any[] = [];
     
-    const snapshot = await db.collection('properties').where('ownerId', '==', ownerId).get();
-    snapshot.forEach((doc: any) => {
-      properties.push(doc.data());
-    });
+    const properties = await Property.find({ ownerId: new mongoose.Types.ObjectId(ownerId) });
+
+    // Convert S3 keys to presigned URLs
+    const propertiesWithUrls = await Promise.all(
+      properties.map((prop) => convertKeysToUrls(prop))
+    );
 
     res.json({
       success: true,
-      data: properties,
+      data: propertiesWithUrls,
     });
   } catch (error: any) {
     res.status(500).json({
@@ -309,11 +345,11 @@ router.get('/search/nearby', async (req: Request, res: Response) => {
     const lng = Number(longitude);
     const rad = Number(radius);
 
-    const properties: any[] = [];
-    const snapshot = await db.collection('properties').get();
+    // Fetch all properties from MongoDB
+    const allProperties = await Property.find({});
     
-    snapshot.forEach((doc: any) => {
-      const property = doc.data();
+    const properties: any[] = [];
+    for (const property of allProperties) {
       // Simple distance calculation (approximate)
       const distance = Math.sqrt(
         Math.pow((property.latitude - lat) * 111, 2) +
@@ -321,9 +357,10 @@ router.get('/search/nearby', async (req: Request, res: Response) => {
       );
       
       if (distance <= rad / 1000) {
-        properties.push({ ...property, distance: Math.round(distance * 1000) });
+        const propWithUrls = await convertKeysToUrls(property);
+        properties.push({ ...propWithUrls, distance: Math.round(distance * 1000) });
       }
-    });
+    }
 
     // Sort by distance
     properties.sort((a: any, b: any) => a.distance - b.distance);
