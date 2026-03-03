@@ -7,7 +7,8 @@
     "start": "ts-node-dev --respawn src/index.ts",
     "build": "tsc",
     "dev": "ts-node-dev --respawn src/index.ts",
-    "serve": "node dist/index.js"
+    "serve": "node dist/index.js",
+    "seed": "ts-node src/scripts/seedDatabase.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.997.0",

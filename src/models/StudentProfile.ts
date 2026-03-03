@@ -138,7 +138,6 @@ const StudentProfileSchema = new Schema<IStudentProfile>({
 
 // Index for faster queries
 StudentProfileSchema.index({ userId: 1 });
-// StudentProfileSchema.index({ email: 1 });
 
 export const StudentProfile = mongoose.model<IStudentProfile>(
   "StudentProfile",
