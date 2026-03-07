@@ -18,6 +18,13 @@ export interface IRatingSummary {
   recentRatings: number[];
 }
 
+export interface IVerificationMeta {
+  phoneVerified: boolean;
+  idVerified: boolean;
+  businessVerified: boolean;
+  badge: "none" | "verified_owner";
+}
+
 export interface IUser extends Document {
   _id: mongoose.Types.ObjectId;
   email: string;
@@ -32,6 +39,7 @@ export interface IUser extends Document {
   verificationStatus: VerificationStatus;
   backgroundCheckStatus?: "pending" | "approved" | "rejected";
   ratingSummary?: IRatingSummary;
+  verificationMeta?: IVerificationMeta;
   isActive: boolean;
   isBlocked: boolean;
   blockedUsers?: mongoose.Types.ObjectId[];
@@ -56,6 +64,26 @@ const RatingSummarySchema = new Schema<IRatingSummary>({
       max: 5,
     },
   ],
+});
+
+const VerificationMetaSchema = new Schema<IVerificationMeta>({
+  phoneVerified: {
+    type: Boolean,
+    default: false,
+  },
+  idVerified: {
+    type: Boolean,
+    default: false,
+  },
+  businessVerified: {
+    type: Boolean,
+    default: false,
+  },
+  badge: {
+    type: String,
+    enum: ["none", "verified_owner"],
+    default: "none",
+  },
 });
 
 const UserSchema = new Schema<IUser>({
@@ -111,6 +139,10 @@ const UserSchema = new Schema<IUser>({
   },
   ratingSummary: {
     type: RatingSummarySchema,
+    default: {},
+  },
+  verificationMeta: {
+    type: VerificationMetaSchema,
     default: {},
   },
   isActive: {

@@ -20,6 +20,7 @@ import matchingRoutes from "./routes/matching";
 import bookingLifecycleRoutes from "./routes/bookingLifecycle";
 import ledgerRoutes from "./routes/ledger";
 import ratingRoutes from "./routes/ratings";
+import adminRoutes from "./routes/admin";
 
 // Import MongoDB connection
 import { connectDB } from "./db/mongodb";
@@ -79,6 +80,7 @@ app.use("/api/matching", matchingRoutes);
 app.use("/api/booking-lifecycle", bookingLifecycleRoutes);
 app.use("/api/ledger", ledgerRoutes);
 app.use("/api/ratings", ratingRoutes);
+app.use("/api/admin", adminRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {

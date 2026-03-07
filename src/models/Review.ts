@@ -49,6 +49,11 @@ export interface IReview extends Document {
   comment: string;
   isAnonymous: boolean;
   isLocked: boolean; // Can't edit after submission
+  isFlagged: boolean;
+  flagReason?: string;
+  isRemoved: boolean;
+  removedBy?: mongoose.Types.ObjectId;
+  removedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -145,6 +150,27 @@ const ReviewSchema = new Schema<IReview>({
     type: Boolean,
     default: false,
   },
+  isFlagged: {
+    type: Boolean,
+    default: false,
+  },
+  flagReason: {
+    type: String,
+    default: "",
+  },
+  isRemoved: {
+    type: Boolean,
+    default: false,
+  },
+  removedBy: {
+    type: Schema.Types.ObjectId,
+    ref: "User",
+    default: null,
+  },
+  removedAt: {
+    type: Date,
+    default: null,
+  },
   createdAt: {
     type: Date,
     default: Date.now,
@@ -160,6 +186,7 @@ ReviewSchema.index({ stayRecordId: 1, ratingType: 1 });
 ReviewSchema.index({ fromUserId: 1, ratingType: 1 });
 ReviewSchema.index({ toUserId: 1, ratingType: 1 });
 ReviewSchema.index({ propertyId: 1, ratingType: 1 });
+ReviewSchema.index({ isFlagged: 1, isRemoved: 1 });
 
 export const Review = mongoose.model<IReview>("Review", ReviewSchema);
 

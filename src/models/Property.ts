@@ -3,12 +3,17 @@
  * MongoDB schema for properties
  */
 
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema } from "mongoose";
 
-export type PropertyType = 'apartment' | 'pg' | 'hostel' | 'flat';
+export type PropertyType = "apartment" | "pg" | "hostel" | "flat";
+export type PropertyStatus =
+  | "pending_review"
+  | "approved"
+  | "rejected"
+  | "suspended";
 
 export interface ILandmark {
-  type: 'bus-stop' | 'market' | 'college' | 'hospital' | 'park';
+  type: "bus-stop" | "market" | "college" | "hospital" | "park";
   name: string;
   distance: number;
   duration: number;
@@ -38,6 +43,11 @@ export interface IProperty extends Document {
   };
   videoUrl: string;
   verified: boolean;
+  verificationBadge: boolean;
+  status: PropertyStatus;
+  moderationNotes?: string;
+  reviewedBy?: mongoose.Types.ObjectId;
+  reviewedAt?: Date;
   safetyRating: number;
   reviews: mongoose.Types.ObjectId[];
   createdAt: Date;
@@ -49,7 +59,7 @@ export interface IProperty extends Document {
 const LandmarkSchema = new Schema<ILandmark>({
   type: {
     type: String,
-    enum: ['bus-stop', 'market', 'college', 'hospital', 'park'],
+    enum: ["bus-stop", "market", "college", "hospital", "park"],
     required: true,
   },
   name: {
@@ -69,7 +79,7 @@ const LandmarkSchema = new Schema<ILandmark>({
 const PropertySchema = new Schema<IProperty>({
   ownerId: {
     type: Schema.Types.ObjectId,
-    ref: 'User',
+    ref: "User",
     required: true,
   },
   title: {
@@ -78,11 +88,11 @@ const PropertySchema = new Schema<IProperty>({
   },
   description: {
     type: String,
-    default: '',
+    default: "",
   },
   type: {
     type: String,
-    enum: ['apartment', 'pg', 'hostel', 'flat'],
+    enum: ["apartment", "pg", "hostel", "flat"],
     required: true,
   },
   address: {
@@ -113,12 +123,16 @@ const PropertySchema = new Schema<IProperty>({
     type: Number,
     default: 1,
   },
-  amenities: [{
-    type: String,
-  }],
-  photos: [{
-    type: String,
-  }],
+  amenities: [
+    {
+      type: String,
+    },
+  ],
+  photos: [
+    {
+      type: String,
+    },
+  ],
   categorizedImages: {
     bedroom: [String],
     bathroom: [String],
@@ -128,20 +142,44 @@ const PropertySchema = new Schema<IProperty>({
   },
   videoUrl: {
     type: String,
-    default: '',
+    default: "",
   },
   verified: {
     type: Boolean,
     default: false,
   },
+  verificationBadge: {
+    type: Boolean,
+    default: false,
+  },
+  status: {
+    type: String,
+    enum: ["pending_review", "approved", "rejected", "suspended"],
+    default: "pending_review",
+  },
+  moderationNotes: {
+    type: String,
+    default: "",
+  },
+  reviewedBy: {
+    type: Schema.Types.ObjectId,
+    ref: "User",
+    default: null,
+  },
+  reviewedAt: {
+    type: Date,
+    default: null,
+  },
   safetyRating: {
     type: Number,
     default: 0,
   },
-  reviews: [{
-    type: Schema.Types.ObjectId,
-    ref: 'Review',
-  }],
+  reviews: [
+    {
+      type: Schema.Types.ObjectId,
+      ref: "Review",
+    },
+  ],
   createdAt: {
     type: Date,
     default: Date.now,
@@ -159,6 +197,7 @@ const PropertySchema = new Schema<IProperty>({
 
 // Indexes for faster queries
 PropertySchema.index({ ownerId: 1 });
+PropertySchema.index({ status: 1 });
 // PropertySchema.index({ city: 1 });
 // PropertySchema.index({ type: 1 });
 // PropertySchema.index({ 'budget.min': 1, 'budget.max': 1 });
@@ -166,7 +205,6 @@ PropertySchema.index({ ownerId: 1 });
 // PropertySchema.index({ verified: 1 });
 // PropertySchema.index({ location: '2dsphere' });
 
-export const Property = mongoose.model<IProperty>('Property', PropertySchema);
+export const Property = mongoose.model<IProperty>("Property", PropertySchema);
 
 export default Property;
-
