@@ -42,6 +42,8 @@ export interface IProperty extends Document {
     balcony?: string[];
   };
   videoUrl: string;
+  ownerVerified: boolean;
+  ownerVerifiedAt?: Date;
   verified: boolean;
   verificationBadge: boolean;
   status: PropertyStatus;
@@ -143,6 +145,14 @@ const PropertySchema = new Schema<IProperty>({
   videoUrl: {
     type: String,
     default: "",
+  },
+  ownerVerified: {
+    type: Boolean,
+    default: false,
+  },
+  ownerVerifiedAt: {
+    type: Date,
+    default: null,
   },
   verified: {
     type: Boolean,

@@ -9,6 +9,11 @@ import {
   RoommateProfile,
 } from "../types";
 
+const TENANT_COUNT = 10;
+const OWNER_COUNT = 5;
+const PROPERTIES_PER_OWNER = 5;
+const PROPERTY_COUNT = OWNER_COUNT * PROPERTIES_PER_OWNER;
+
 // Dummy property images from Unsplash
 const propertyImages = [
   "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267",
@@ -39,16 +44,18 @@ const generateCategorizedImages = (bedrooms: number) => ({
   balcony: generatePropertyImages(1),
 });
 
-// Indian cities for properties
-const cities = [
-  "Bhubaneswar",
-  "Delhi",
-  "Mumbai",
-  "Bangalore",
-  "Pune",
-  "Hyderabad",
-  "Chennai",
-  "Kolkata",
+// Bhubaneswar (Odisha) localities for properties
+const bhubaneswarLocalities = [
+  { area: "Patia", latitude: 20.3554, longitude: 85.8196 },
+  { area: "Khandagiri", latitude: 20.2569, longitude: 85.7819 },
+  { area: "Nayapalli", latitude: 20.2964, longitude: 85.8146 },
+  { area: "Saheed Nagar", latitude: 20.2878, longitude: 85.8417 },
+  { area: "Chandrasekharpur", latitude: 20.3345, longitude: 85.8247 },
+  { area: "Rasulgarh", latitude: 20.2976, longitude: 85.8715 },
+  { area: "Old Town", latitude: 20.2386, longitude: 85.8335 },
+  { area: "Laxmisagar", latitude: 20.2679, longitude: 85.8579 },
+  { area: "Sundarpada", latitude: 20.2245, longitude: 85.7927 },
+  { area: "Bomikhal", latitude: 20.2814, longitude: 85.8568 },
 ];
 const colleges = [
   "NIT Rourkela",
@@ -128,12 +135,12 @@ const names = {
 // Generate 30 tenant users
 const generateTenants = (): Record<string, User> => {
   const tenants: Record<string, User> = {};
-  for (let i = 1; i <= 30; i++) {
+  for (let i = 1; i <= TENANT_COUNT; i++) {
     const firstName = names.first[i % names.first.length];
     const lastName = names.last[i % names.last.length];
     tenants[`tenant${i}`] = {
       id: `tenant${i}`,
-      email: `tenant${i}@example.com`,
+      email: `tenant${i}@gmail.com`,
       phone: `+91 ${9000000000 + i}`,
       name: `${firstName} ${lastName}`,
       role: "student",
@@ -149,12 +156,12 @@ const generateTenants = (): Record<string, User> => {
 // Generate 20 owner users
 const generateOwners = (): Record<string, User> => {
   const owners: Record<string, User> = {};
-  for (let i = 1; i <= 20; i++) {
+  for (let i = 1; i <= OWNER_COUNT; i++) {
     const firstName = names.first[(i + 15) % names.first.length];
     const lastName = names.last[(i + 10) % names.last.length];
     owners[`owner${i}`] = {
       id: `owner${i}`,
-      email: `owner${i}@example.com`,
+      email: `owner${i}@gamil.com`,
       phone: `+91 ${8000000000 + i}`,
       name: `${firstName} ${lastName}`,
       role: "owner",
@@ -189,7 +196,7 @@ const generateStudentProfiles = (): Record<string, StudentProfile> => {
     "double",
   ];
 
-  for (let i = 1; i <= 30; i++) {
+  for (let i = 1; i <= TENANT_COUNT; i++) {
     const user = dummyUsers[`tenant${i}`];
     profiles[`tenant${i}`] = {
       id: user.id,
@@ -222,9 +229,12 @@ export const dummyStudentProfiles: Record<string, StudentProfile> =
 const generateOwnerProfiles = (): Record<string, OwnerProfile> => {
   const profiles: Record<string, OwnerProfile> = {};
 
-  for (let i = 1; i <= 20; i++) {
+  for (let i = 1; i <= OWNER_COUNT; i++) {
     const user = dummyUsers[`owner${i}`];
-    const propertyIds = [`prop${(i - 1) * 2 + 1}`, `prop${(i - 1) * 2 + 2}`];
+    const propertyIds = Array.from(
+      { length: PROPERTIES_PER_OWNER },
+      (_, idx) => `prop${(i - 1) * PROPERTIES_PER_OWNER + idx + 1}`,
+    );
 
     profiles[`owner${i}`] = {
       id: user.id,
@@ -272,10 +282,12 @@ const generateProperties = (): Record<string, Property> => {
     "Co-living Space",
   ];
 
-  for (let i = 1; i <= 40; i++) {
-    const ownerIndex = Math.ceil(i / 2);
+  for (let i = 1; i <= PROPERTY_COUNT; i++) {
+    const ownerIndex = Math.ceil(i / PROPERTIES_PER_OWNER);
     const ownerId = `owner${ownerIndex}`;
-    const city = cities[i % cities.length];
+    const locality =
+      bhubaneswarLocalities[(i - 1) % bhubaneswarLocalities.length];
+    const city = "Bhubaneswar";
     const bedrooms = 1 + (i % 4);
     const bathrooms = 1 + (i % 3);
     const budget = 7000 + i * 1000;
@@ -284,12 +296,12 @@ const generateProperties = (): Record<string, Property> => {
     properties[`prop${i}`] = {
       id: `prop${i}`,
       ownerId,
-      title: `${titles[i % titles.length]} - ${city}`,
+      title: `${titles[i % titles.length]} - ${locality.area}, ${city}`,
       description: `Well-maintained ${type} with modern amenities and excellent connectivity. Perfect for students and working professionals.`,
       type,
-      address: `${i} Main Street, ${city}`,
-      latitude: 20.2961 + i * 0.01,
-      longitude: 85.8245 + i * 0.01,
+      address: `${10 + i}, ${locality.area}, ${city}, Odisha`,
+      latitude: locality.latitude + (i % 3) * 0.001,
+      longitude: locality.longitude + (i % 3) * 0.001,
       city,
       budget: { min: budget, max: budget },
       bedrooms,
@@ -317,13 +329,13 @@ const generateProperties = (): Record<string, Property> => {
       landmarks: [
         {
           type: "bus-stop",
-          name: `${city} Bus Stop`,
+          name: `${locality.area} Bus Stop`,
           distance: 300 + i * 50,
           duration: 3 + (i % 5),
         },
         {
           type: "market",
-          name: `${city} Market`,
+          name: `${locality.area} Market`,
           distance: 500 + i * 100,
           duration: 5 + (i % 10),
         },
@@ -331,7 +343,12 @@ const generateProperties = (): Record<string, Property> => {
           ? [
               {
                 type: "college" as const,
-                name: colleges[i % colleges.length],
+                name: [
+                  "KIIT University",
+                  "Utkal University",
+                  "SOA University",
+                  "Ravenshaw University (BBSR Campus)",
+                ][i % 4],
                 distance: 2000 + i * 200,
                 duration: 15 + (i % 15),
               },
@@ -362,10 +379,10 @@ const generateReviews = (): Record<string, Review> => {
   ];
 
   let reviewCount = 1;
-  for (let i = 1; i <= 30 && reviewCount <= 60; i++) {
+  for (let i = 1; i <= PROPERTY_COUNT && reviewCount <= 60; i++) {
     const reviewsForProperty = 1 + (i % 3);
     for (let j = 0; j < reviewsForProperty && reviewCount <= 60; j++) {
-      const tenantIndex = ((reviewCount + j) % 30) + 1;
+      const tenantIndex = ((reviewCount + j) % TENANT_COUNT) + 1;
       reviews[`review${reviewCount}`] = {
         id: `review${reviewCount}`,
         userId: `tenant${tenantIndex}`,
@@ -404,7 +421,7 @@ const generateRoommateProfiles = (): Record<string, RoommateProfile> => {
     "group",
   ];
 
-  for (let i = 1; i <= 30; i++) {
+  for (let i = 1; i <= TENANT_COUNT; i++) {
     const student = dummyStudentProfiles[`tenant${i}`];
     profiles[`roommate${i}`] = {
       userId: student.id,
@@ -414,7 +431,7 @@ const generateRoommateProfiles = (): Record<string, RoommateProfile> => {
       sleepSchedule: student.sleepSchedule,
       habits: habits[i % habits.length],
       studyPreference: studyPreferences[i % studyPreferences.length],
-      compatibilityScore: 75 + (i % 20),
+      compatibilityScore: 75 + (i % TENANT_COUNT),
     };
   }
   return profiles;
@@ -438,9 +455,9 @@ const generateBookings = (): Record<string, Booking> => {
     "rejected",
   ];
 
-  for (let i = 1; i <= 40; i++) {
+  for (let i = 1; i <= PROPERTY_COUNT; i++) {
     const propertyId = `prop${i}`;
-    const tenantIndex = (i % 30) + 1;
+    const tenantIndex = (i % TENANT_COUNT) + 1;
     const tenantId = `tenant${tenantIndex}`;
 
     bookings[`booking${i}`] = {
@@ -477,10 +494,10 @@ const generateAgreements = (): Record<string, Agreement> => {
     ["Guest policy applies", "1-month notice required", "Regular inspections"],
   ];
 
-  for (let i = 1; i <= 25; i++) {
+  for (let i = 1; i <= PROPERTY_COUNT; i++) {
     const propertyId = `prop${i}`;
     const property = dummyProperties[propertyId];
-    const tenantIndex = (i % 30) + 1;
+    const tenantIndex = (i % TENANT_COUNT) + 1;
     const tenantId = `tenant${tenantIndex}`;
 
     agreements[`agreement${i}`] = {
@@ -519,9 +536,9 @@ export const dummyMessages: Array<{
   content: string;
   read: boolean;
   createdAt: Date;
-}> = Array.from({ length: 100 }, (_, i) => {
-  const senderIndex = (i % 30) + 1;
-  const receiverOwnerIndex = (i % 20) + 1;
+}> = Array.from({ length: 60 }, (_, i) => {
+  const senderIndex = (i % TENANT_COUNT) + 1;
+  const receiverOwnerIndex = (i % OWNER_COUNT) + 1;
   const isOwnerSending = i % 3 === 0;
 
   return {
@@ -550,10 +567,10 @@ export const dummyVisitRequests: Array<{
   status: "pending" | "approved" | "rejected" | "completed";
   notes?: string;
   createdAt: Date;
-}> = Array.from({ length: 30 }, (_, i) => {
-  const propertyId = `prop${(i % 40) + 1}`;
+}> = Array.from({ length: 20 }, (_, i) => {
+  const propertyId = `prop${(i % PROPERTY_COUNT) + 1}`;
   const property = dummyProperties[propertyId];
-  const tenantIndex = (i % 30) + 1;
+  const tenantIndex = (i % TENANT_COUNT) + 1;
   const statuses: ("pending" | "approved" | "rejected" | "completed")[] = [
     "pending",
     "approved",
@@ -586,9 +603,9 @@ export const dummyStayRecords: Array<{
   depositAmount: number;
   createdAt: Date;
 }> = Array.from({ length: 20 }, (_, i) => {
-  const propertyId = `prop${(i % 40) + 1}`;
+  const propertyId = `prop${(i % PROPERTY_COUNT) + 1}`;
   const property = dummyProperties[propertyId];
-  const tenantIndex = (i % 30) + 1;
+  const tenantIndex = (i % TENANT_COUNT) + 1;
   const statuses: (
     | "upcoming"
     | "active"
@@ -764,7 +781,7 @@ export const dummyMatchProfiles: Array<{
   budgetRange: { min: number; max: number };
   bio?: string;
   createdAt: Date;
-}> = Array.from({ length: 30 }, (_, i) => {
+}> = Array.from({ length: TENANT_COUNT }, (_, i) => {
   const user = dummyUsers[`tenant${i + 1}`];
   const profile = dummyStudentProfiles[`tenant${i + 1}`];
   const sleepTimes: ("early" | "late" | "flexible")[] = [

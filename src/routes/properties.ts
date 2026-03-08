@@ -91,6 +91,7 @@ router.get("/", async (req: Request, res: Response) => {
       bedrooms,
       amenities,
       verified,
+      ownerVerified,
       page = 1,
       limit = 10,
       sortBy = "createdAt",
@@ -121,6 +122,9 @@ router.get("/", async (req: Request, res: Response) => {
     }
     if (verified !== undefined) {
       query.verified = verified === "true";
+    }
+    if (ownerVerified !== undefined) {
+      query.ownerVerified = ownerVerified === "true";
     }
 
     // Fetch from MongoDB
@@ -253,6 +257,8 @@ router.post("/", async (req: Request, res: Response) => {
       photos: propertyData.photos || [],
       categorizedImages: propertyData.categorizedImages || {},
       videoUrl: propertyData.videoUrl || "",
+      ownerVerified: false,
+      ownerVerifiedAt: null,
       verified: false,
       safetyRating: 0,
       reviews: [],
@@ -290,6 +296,51 @@ router.post("/", async (req: Request, res: Response) => {
     });
   }
 });
+
+// PATCH /api/properties/:id/owner-verification - Owner verifies their own property listing
+router.patch(
+  "/:id/owner-verification",
+  authenticateToken,
+  async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const userId = (req as any).userId;
+
+      const property = await Property.findById(id);
+      if (!property) {
+        return res.status(404).json({
+          success: false,
+          error: "Property not found",
+        });
+      }
+
+      if (property.ownerId.toString() !== userId) {
+        return res.status(403).json({
+          success: false,
+          error: "Only property owner can verify this listing",
+        });
+      }
+
+      property.ownerVerified = true;
+      property.ownerVerifiedAt = new Date();
+      property.updatedAt = new Date();
+      await property.save();
+
+      const propertyWithUrls = await convertKeysToUrls(property);
+
+      return res.json({
+        success: true,
+        data: propertyWithUrls,
+        message: "Property owner verification completed",
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        error: error.message || "Failed to verify property",
+      });
+    }
+  },
+);
 
 // PUT /api/properties/:id - Update a property
 router.put("/:id", async (req: Request, res: Response) => {

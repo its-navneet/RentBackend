@@ -278,18 +278,19 @@ router.patch(
       }
 
       const { action } = req.body as { action?: string };
-      const allowedActions = ["verify", "suspend", "ban", "reset"];
+      const allowedActions = ["verify", "approve", "suspend", "ban", "reset"];
 
       if (!action || !allowedActions.includes(action)) {
         res.status(400).json({
           success: false,
-          error: "Invalid action. Allowed: verify, suspend, ban, reset",
+          error:
+            "Invalid action. Allowed: verify, approve, suspend, ban, reset",
         });
         return;
       }
 
       const updates: Record<string, unknown> = { updatedAt: new Date() };
-      if (action === "verify") {
+      if (action === "verify" || action === "approve") {
         updates.verified = true;
         updates.verificationStatus = "verified";
       } else if (action === "suspend") {

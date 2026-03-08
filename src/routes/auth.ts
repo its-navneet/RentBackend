@@ -3,6 +3,7 @@ import auth from "../services/auth";
 import db from "../services/db";
 import mongoose from "mongoose";
 import { log } from "console";
+import { User } from "../models/User";
 
 const router = express.Router();
 
@@ -59,6 +60,7 @@ router.post("/register", async (req: Request, res: Response) => {
       role,
       createdAt: new Date(),
       verified: false,
+      verificationStatus: "pending",
     };
 
     // Don't override the user document - it's already created by auth service with hashed password
@@ -108,8 +110,12 @@ router.post("/register", async (req: Request, res: Response) => {
         uid: result.user.uid,
         email: result.user.email,
         role,
+        name,
+        verified: false,
+        verificationStatus: "pending",
       },
-      message: "User registered successfully",
+      message:
+        "User registered successfully. Your account is pending admin verification.",
     });
   } catch (error: any) {
     res.status(400).json({
@@ -134,9 +140,8 @@ router.post("/login", async (req: Request, res: Response) => {
 
     const result = await auth.signInWithEmailAndPassword(email, password);
 
-    // Get user profile
-    const userDoc = await db.collection("users").doc(result.user.uid).get();
-    const userData = userDoc.data();
+    // Get user profile with verification metadata
+    const userData = await User.findById(result.user.uid).lean();
 
     const response = {
       success: true,
@@ -145,6 +150,8 @@ router.post("/login", async (req: Request, res: Response) => {
         email: result.user.email,
         role: userData?.role,
         name: userData?.name,
+        verified: Boolean(userData?.verified),
+        verificationStatus: userData?.verificationStatus ?? "pending",
         token: result.token,
       },
       message: "Login successful",
@@ -197,8 +204,7 @@ router.get("/me", async (req: Request, res: Response) => {
       });
     }
 
-    const userDoc = await db.collection("users").doc(currentUser.uid).get();
-    const userData = userDoc.data();
+    const userData = await User.findById(currentUser.uid).lean();
 
     if (!userData) {
       return res.status(404).json({
@@ -209,7 +215,16 @@ router.get("/me", async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      data: userData,
+      data: {
+        uid: userData._id,
+        id: userData._id,
+        email: userData.email,
+        name: userData.name,
+        phone: userData.phone,
+        role: userData.role,
+        verified: Boolean(userData.verified),
+        verificationStatus: userData.verificationStatus ?? "pending",
+      },
     });
   } catch (error: any) {
     res.status(500).json({

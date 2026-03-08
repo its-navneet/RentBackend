@@ -44,6 +44,10 @@ const bookingIdMap = new Map<string, mongoose.Types.ObjectId>();
 const visitIdMap = new Map<string, mongoose.Types.ObjectId>();
 const stayIdMap = new Map<string, mongoose.Types.ObjectId>();
 const bookingRequestIds: mongoose.Types.ObjectId[] = [];
+const propertyKeys = Object.keys(dummyProperties);
+const tenantKeys = Object.entries(dummyUsers)
+  .filter(([, user]) => user.role === "student")
+  .map(([key]) => key);
 
 const getOrCreateId = (
   map: Map<string, mongoose.Types.ObjectId>,
@@ -78,7 +82,7 @@ async function clearDatabase() {
 }
 
 async function seedUsers() {
-  const seededPasswordHash = await bcrypt.hash("password123", 10);
+  const seededPasswordHash = await bcrypt.hash("test", 10);
 
   const users = Object.entries(dummyUsers).map(([key, user]) => ({
     _id: getOrCreateId(userIdMap, key),
@@ -179,9 +183,9 @@ async function seedBookingRequests() {
   ];
 
   const requests = Array.from({ length: 35 }, (_, i) => {
-    const propKey = `prop${(i % 40) + 1}`;
+    const propKey = propertyKeys[i % propertyKeys.length];
     const ownerKey = dummyProperties[propKey].ownerId;
-    const tenantKey = `tenant${(i % 30) + 1}`;
+    const tenantKey = tenantKeys[i % tenantKeys.length];
 
     const id = new mongoose.Types.ObjectId();
     bookingRequestIds.push(id);
@@ -192,7 +196,11 @@ async function seedBookingRequests() {
       propertyId: getOrCreateId(propertyIdMap, propKey),
       ownerId: getOrCreateId(userIdMap, ownerKey),
       visitRequestId:
-        i < 30 ? visitIdMap.get(`visit${(i % 30) + 1}`) || null : null,
+        i < dummyVisitRequests.length
+          ? visitIdMap.get(
+              dummyVisitRequests[i % dummyVisitRequests.length].id,
+            ) || null
+          : null,
       status: statuses[i % statuses.length],
       proposedCheckInDate: new Date(Date.now() + (i + 7) * 86400000),
       proposedCheckOutDate:
@@ -295,7 +303,10 @@ async function seedReviews() {
     stayRecordId: null,
     fromUserId: getOrCreateId(userIdMap, r.userId),
     toUserId: null,
-    propertyId: getOrCreateId(propertyIdMap, `prop${(i % 40) + 1}`),
+    propertyId: getOrCreateId(
+      propertyIdMap,
+      propertyKeys[i % propertyKeys.length],
+    ),
     overallRating: r.rating,
     propertyCriteria: {
       cleanliness: r.safetyRating,
