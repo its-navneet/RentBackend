@@ -58,6 +58,7 @@ app.use(
 // Health check endpoint
 app.get("/health", (req: Request, res: Response) => {
   console.log("Health check endpoint hit");
+  console.log("Mongo URI:", process.env.MONGODB_URI);
   res.json({
     success: true,
     message: "Server is running",
