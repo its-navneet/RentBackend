@@ -3,9 +3,14 @@
  * MongoDB schema for rental agreements
  */
 
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema } from "mongoose";
 
-export type AgreementStatus = 'draft' | 'pending-sign' | 'active' | 'expired' | 'terminated';
+export type AgreementStatus =
+  | "draft"
+  | "pending-sign"
+  | "active"
+  | "expired"
+  | "terminated";
 
 export interface IAgreement extends Document {
   _id: mongoose.Types.ObjectId;
@@ -20,6 +25,10 @@ export interface IAgreement extends Document {
   customClauses: string[];
   signatureStudent?: string;
   signatureOwner?: string;
+  tenantSignerName?: string;
+  ownerSignerName?: string;
+  tenantSignedAt?: Date;
+  ownerSignedAt?: Date;
   status: AgreementStatus;
   createdAt: Date;
   updatedAt: Date;
@@ -28,22 +37,22 @@ export interface IAgreement extends Document {
 const AgreementSchema = new Schema<IAgreement>({
   propertyId: {
     type: Schema.Types.ObjectId,
-    ref: 'Property',
+    ref: "Property",
     required: true,
   },
   studentId: {
     type: Schema.Types.ObjectId,
-    ref: 'User',
+    ref: "User",
     required: true,
   },
   ownerId: {
     type: Schema.Types.ObjectId,
-    ref: 'User',
+    ref: "User",
     required: true,
   },
   termsAndConditions: {
     type: String,
-    default: 'Standard rental agreement',
+    default: "Standard rental agreement",
   },
   moveInDate: {
     type: Date,
@@ -61,19 +70,33 @@ const AgreementSchema = new Schema<IAgreement>({
     type: Number,
     required: true,
   },
-  customClauses: [{
-    type: String,
-  }],
+  customClauses: [
+    {
+      type: String,
+    },
+  ],
   signatureStudent: {
     type: String,
   },
   signatureOwner: {
     type: String,
   },
+  tenantSignerName: {
+    type: String,
+  },
+  ownerSignerName: {
+    type: String,
+  },
+  tenantSignedAt: {
+    type: Date,
+  },
+  ownerSignedAt: {
+    type: Date,
+  },
   status: {
     type: String,
-    enum: ['draft', 'pending-sign', 'active', 'expired', 'terminated'],
-    default: 'draft',
+    enum: ["draft", "pending-sign", "active", "expired", "terminated"],
+    default: "draft",
   },
   createdAt: {
     type: Date,
@@ -88,7 +111,9 @@ const AgreementSchema = new Schema<IAgreement>({
 // Indexes for faster queries
 AgreementSchema.index({ propertyId: 1 });
 
-export const Agreement = mongoose.model<IAgreement>('Agreement', AgreementSchema);
+export const Agreement = mongoose.model<IAgreement>(
+  "Agreement",
+  AgreementSchema,
+);
 
 export default Agreement;
-

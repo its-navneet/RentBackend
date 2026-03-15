@@ -3,15 +3,16 @@
  * JWT-based authentication with MongoDB
  */
 
-import jwt, { SignOptions } from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
-import { User, IUser } from '../models/User';
-import { StudentProfile } from '../models/StudentProfile';
-import { OwnerProfile } from '../models/OwnerProfile';
-import { log } from 'node:console';
+import jwt, { SignOptions } from "jsonwebtoken";
+import bcrypt from "bcryptjs";
+import { User, IUser } from "../models/User";
+import { StudentProfile } from "../models/StudentProfile";
+import { OwnerProfile } from "../models/OwnerProfile";
+import { log } from "node:console";
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+const JWT_SECRET =
+  process.env.JWT_SECRET || "your-super-secret-jwt-key-change-in-production";
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 
 export interface AuthUser {
   uid: string;
@@ -24,26 +25,44 @@ let currentUser: AuthUser | null = null;
 
 export const auth = {
   // Create a new user with email and password
-  createUserWithEmailAndPassword: async (email: string, password: string, name: string, phone: string, role: string = 'student') => {
-    console.log('Creating user with email:', email, 'role:', role, 'name:', name, 'phone:', phone, "password:", password);
+  createUserWithEmailAndPassword: async (
+    email: string,
+    password: string,
+    name: string,
+    phone: string,
+    role: string = "tenant",
+    gender: string = "other",
+  ) => {
+    console.log(
+      "Creating user with email:",
+      email,
+      "role:",
+      role,
+      "name:",
+      name,
+      "phone:",
+      phone,
+      "password:",
+      password,
+    );
     // Validate input
-    if (!email || typeof email !== 'string' || email.trim() === '') {
-      throw new Error('Email is required');
+    if (!email || typeof email !== "string" || email.trim() === "") {
+      throw new Error("Email is required");
     }
-    if (!password || typeof password !== 'string' || password.trim() === '') {
-      throw new Error('Password is required');
+    if (!password || typeof password !== "string" || password.trim() === "") {
+      throw new Error("Password is required");
     }
-    if (!name || typeof name !== 'string' || name.trim() === '') {
-      throw new Error('Name is required');
+    if (!name || typeof name !== "string" || name.trim() === "") {
+      throw new Error("Name is required");
     }
-    if (!role || typeof role !== 'string' || role.trim() === '') {
-      throw new Error('Role is required');
+    if (!role || typeof role !== "string" || role.trim() === "") {
+      throw new Error("Role is required");
     }
 
     // Check if user already exists
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
-      throw new Error('Email already exists');
+      throw new Error("Email already exists");
     }
 
     // Hash the password
@@ -55,8 +74,9 @@ export const auth = {
       email: email.toLowerCase(),
       password: hashedPassword,
       name: name.trim(),
-      phone: phone ? phone.trim() : '',
+      phone: phone ? phone.trim() : "",
       role: role.trim(),
+      gender: gender.trim(),
       verified: false,
     });
 
@@ -75,21 +95,21 @@ export const auth = {
     // Find the user
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
-      throw new Error('Invalid email or password');
+      throw new Error("Invalid email or password");
     }
 
     // Check the password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      throw new Error('Invalid email or password');
+      throw new Error("Invalid email or password");
     }
 
     // Generate JWT token
-    const options: SignOptions = { expiresIn: '7d' };
+    const options: SignOptions = { expiresIn: "7d" };
     const token = jwt.sign(
       { uid: user._id.toString(), email: user.email, role: user.role },
       JWT_SECRET,
-      options
+      options,
     );
 
     // Store current user
@@ -145,11 +165,11 @@ export const auth = {
 
   // Generate JWT token
   generateToken: (user: IUser): string => {
-    const options: SignOptions = { expiresIn: '7d' };
+    const options: SignOptions = { expiresIn: "7d" };
     return jwt.sign(
       { uid: user._id.toString(), email: user.email, role: user.role },
       JWT_SECRET,
-      options
+      options,
     );
   },
 
@@ -159,15 +179,19 @@ export const auth = {
   },
 
   // Change password
-  changePassword: async (userId: string, oldPassword: string, newPassword: string) => {
+  changePassword: async (
+    userId: string,
+    oldPassword: string,
+    newPassword: string,
+  ) => {
     const user = await User.findById(userId);
     if (!user) {
-      throw new Error('User not found');
+      throw new Error("User not found");
     }
 
     const isMatch = await bcrypt.compare(oldPassword, user.password);
     if (!isMatch) {
-      throw new Error('Current password is incorrect');
+      throw new Error("Current password is incorrect");
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -179,4 +203,3 @@ export const auth = {
 };
 
 export default auth;
-

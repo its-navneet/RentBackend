@@ -10,7 +10,8 @@ const router = express.Router();
 // POST /api/auth/register
 router.post("/register", async (req: Request, res: Response) => {
   try {
-    const { email, password, role, name, phone, preferences } = req.body;
+    const { email, password, role, name, phone, preferences, gender } =
+      req.body;
 
     // More robust validation - check for empty strings and invalid values
     if (
@@ -25,18 +26,30 @@ router.post("/register", async (req: Request, res: Response) => {
       role.trim() === "" ||
       !name ||
       typeof name !== "string" ||
-      name.trim() === ""
+      name.trim() === "" ||
+      !gender ||
+      typeof gender !== "string" ||
+      gender.trim() === ""
     ) {
       return res.status(400).json({
         success: false,
-        error: "Email, password, role, and name are required",
+        error: "Email, password, role, name, and gender are required",
       });
     }
 
-    if (!["student", "owner"].includes(role)) {
+    const normalizedRole = role === "student" ? "tenant" : role;
+
+    if (!["tenant", "owner"].includes(normalizedRole)) {
       return res.status(400).json({
         success: false,
-        error: "Role must be either student or owner",
+        error: "Role must be either tenant or owner",
+      });
+    }
+
+    if (!["male", "female", "other"].includes(gender)) {
+      return res.status(400).json({
+        success: false,
+        error: "Gender must be one of: male, female, other",
       });
     }
 
@@ -45,7 +58,8 @@ router.post("/register", async (req: Request, res: Response) => {
       password,
       name,
       phone,
-      role,
+      normalizedRole,
+      gender,
     );
 
     const userId = result.user.uid;
@@ -57,7 +71,8 @@ router.post("/register", async (req: Request, res: Response) => {
       email,
       name,
       phone: phone || "",
-      role,
+      role: normalizedRole,
+      gender,
       createdAt: new Date(),
       verified: false,
       verificationStatus: "pending",
@@ -67,7 +82,7 @@ router.post("/register", async (req: Request, res: Response) => {
     // await db.collection('users').doc(userId).set({ ...userData, password: '' });
 
     // Create role-specific profile
-    if (role === "student") {
+    if (normalizedRole === "tenant") {
       await db
         .collection("studentProfiles")
         .doc(userId)
@@ -90,7 +105,7 @@ router.post("/register", async (req: Request, res: Response) => {
             safetyRating: 0,
           },
         });
-    } else if (role === "owner") {
+    } else if (normalizedRole === "owner") {
       await db
         .collection("ownerProfiles")
         .doc(userId)
@@ -109,7 +124,8 @@ router.post("/register", async (req: Request, res: Response) => {
       data: {
         uid: result.user.uid,
         email: result.user.email,
-        role,
+        role: normalizedRole,
+        gender,
         name,
         verified: false,
         verificationStatus: "pending",
@@ -149,6 +165,7 @@ router.post("/login", async (req: Request, res: Response) => {
         uid: result.user.uid,
         email: result.user.email,
         role: userData?.role,
+        gender: userData?.gender ?? "other",
         name: userData?.name,
         verified: Boolean(userData?.verified),
         verificationStatus: userData?.verificationStatus ?? "pending",
@@ -222,6 +239,7 @@ router.get("/me", async (req: Request, res: Response) => {
         name: userData.name,
         phone: userData.phone,
         role: userData.role,
+        gender: userData.gender ?? "other",
         verified: Boolean(userData.verified),
         verificationStatus: userData.verificationStatus ?? "pending",
       },
@@ -246,7 +264,7 @@ router.put("/set-user", async (req: Request, res: Response) => {
       });
     }
 
-    auth.setCurrentUser({ uid, email, role: "student" });
+    auth.setCurrentUser({ uid, email, role: "tenant" });
 
     res.json({
       success: true,

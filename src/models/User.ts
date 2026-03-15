@@ -6,6 +6,7 @@
 import mongoose, { Document, Schema } from "mongoose";
 
 export type UserRole = "tenant" | "owner" | "admin";
+export type Gender = "male" | "female" | "other";
 export type VerificationStatus =
   | "pending"
   | "verified"
@@ -32,6 +33,7 @@ export interface IUser extends Document {
   phone: string;
   name: string;
   role: UserRole;
+  gender: Gender;
   profileImage?: string;
   bio?: string;
   createdAt: Date;
@@ -110,6 +112,11 @@ const UserSchema = new Schema<IUser>({
     type: String,
     enum: ["tenant", "owner", "admin"],
     required: true,
+  },
+  gender: {
+    type: String,
+    enum: ["male", "female", "other"],
+    default: "other",
   },
   profileImage: {
     type: String,

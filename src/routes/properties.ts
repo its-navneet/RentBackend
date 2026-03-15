@@ -7,8 +7,17 @@ import auth from "../services/auth";
 
 const router = express.Router();
 
+type AuthenticatedRequest = Request & {
+  userId?: string;
+  userRole?: string;
+};
+
 // Authentication middleware
-const authenticateToken = (req: Request, res: Response, next: any) => {
+const authenticateToken = (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: any,
+) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return res.status(401).json({
@@ -27,8 +36,34 @@ const authenticateToken = (req: Request, res: Response, next: any) => {
     });
   }
 
-  (req as any).userId = currentUser.uid;
+  req.userId = currentUser.uid;
+  req.userRole = currentUser.role;
   next();
+};
+
+const normalizeRole = (role?: string): "tenant" | "owner" | "admin" => {
+  if (role === "admin" || role === "owner") return role;
+  return "tenant";
+};
+
+const isAdminRequest = (req: AuthenticatedRequest): boolean =>
+  normalizeRole(req.userRole) === "admin";
+
+const getAuthUserFromRequest = (
+  req: Request,
+): { uid: string; role: string } | null => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return null;
+  }
+
+  const token = authHeader.split(" ")[1];
+  const currentUser = auth.verifyToken(token);
+  if (!currentUser) {
+    return null;
+  }
+
+  return { uid: currentUser.uid, role: currentUser.role };
 };
 
 const isHttpUrl = (value: string): boolean => /^https?:\/\//i.test(value);
@@ -77,6 +112,11 @@ async function convertKeysToUrls(property: any): Promise<any> {
     propertyObj.categorizedImages = categorizedUrls;
   }
 
+  // Convert videoUrl (S3 key to presigned URL)
+  if (typeof propertyObj.videoUrl === "string" && propertyObj.videoUrl) {
+    propertyObj.videoUrl = await resolveReadUrl(propertyObj.videoUrl);
+  }
+
   return propertyObj;
 }
 
@@ -100,6 +140,9 @@ router.get("/", async (req: Request, res: Response) => {
 
     // Build MongoDB query
     const query: any = {};
+    // Public listings should only show admin-approved properties
+    query.verified = true;
+    query.status = "approved";
     if (city) {
       query.city = { $regex: city, $options: "i" };
     }
@@ -205,6 +248,23 @@ router.get("/:id", async (req: Request, res: Response) => {
       });
     }
 
+    const isPubliclyVisible =
+      property.verified && property.status === "approved";
+    if (!isPubliclyVisible) {
+      const viewer = getAuthUserFromRequest(req);
+      const canViewUnapproved =
+        viewer &&
+        (viewer.uid === property.ownerId.toString() ||
+          normalizeRole(viewer.role) === "admin");
+
+      if (!canViewUnapproved) {
+        return res.status(404).json({
+          success: false,
+          error: "Property not found",
+        });
+      }
+    }
+
     // Convert S3 keys to presigned URLs
     const propertyWithUrls = await convertKeysToUrls(property);
 
@@ -226,85 +286,199 @@ router.get("/:id", async (req: Request, res: Response) => {
 });
 
 // POST /api/properties - Create a new property
-router.post("/", async (req: Request, res: Response) => {
-  try {
-    const propertyData = req.body;
+router.post(
+  "/",
+  authenticateToken,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const propertyData = req.body;
+      const userId = req.userId;
 
-    console.log("=== Creating Property ===");
-    console.log("Photos:", propertyData.photos);
-    console.log("Categorized Images:", propertyData.categorizedImages);
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: "Not authenticated",
+        });
+      }
 
-    if (!propertyData.ownerId || !propertyData.title || !propertyData.address) {
-      return res.status(400).json({
+      console.log("=== Creating Property ===");
+      console.log("Photos:", propertyData.photos);
+      console.log("Categorized Images:", propertyData.categorizedImages);
+
+      if (!propertyData.title || !propertyData.address) {
+        return res.status(400).json({
+          success: false,
+          error: "title and address are required",
+        });
+      }
+
+      const property = new Property({
+        ownerId: new mongoose.Types.ObjectId(userId),
+        title: propertyData.title,
+        description: propertyData.description || "",
+        type: propertyData.type,
+        address: propertyData.address,
+        latitude: propertyData.latitude || 0,
+        longitude: propertyData.longitude || 0,
+        city: propertyData.city || "",
+        budget: propertyData.budget || { min: 0, max: 0 },
+        bedrooms: propertyData.bedrooms || 1,
+        bathrooms: propertyData.bathrooms || 1,
+        amenities: propertyData.amenities || [],
+        photos: propertyData.photos || [],
+        categorizedImages: propertyData.categorizedImages || {},
+        videoUrl: propertyData.videoUrl || "",
+        ownerVerified: false,
+        ownerVerifiedAt: null,
+        verified: false,
+        verificationBadge: false,
+        status: "pending_review",
+        reviewedBy: null,
+        reviewedAt: null,
+        moderationNotes: "",
+        safetyRating: 0,
+        reviews: [],
+        landmarks: propertyData.landmarks || [],
+        availableFrom: propertyData.availableFrom
+          ? new Date(propertyData.availableFrom)
+          : new Date(),
+      });
+
+      await property.save();
+
+      // Update owner's properties list
+      try {
+        await OwnerProfile.findByIdAndUpdate(
+          userId,
+          { $push: { properties: property._id } },
+          { upsert: false },
+        );
+      } catch (e) {
+        console.log("Error updating owner profile:", e);
+      }
+
+      // Convert S3 keys to presigned URLs before sending response
+      const propertyWithUrls = await convertKeysToUrls(property);
+
+      res.status(201).json({
+        success: true,
+        data: propertyWithUrls,
+        message: "Property created successfully",
+      });
+    } catch (error: any) {
+      res.status(500).json({
         success: false,
-        error: "ownerId, title, and address are required",
+        error: error.message || "Failed to create property",
       });
     }
+  },
+);
 
-    const property = new Property({
-      ownerId: new mongoose.Types.ObjectId(propertyData.ownerId),
-      title: propertyData.title,
-      description: propertyData.description || "",
-      type: propertyData.type,
-      address: propertyData.address,
-      latitude: propertyData.latitude || 0,
-      longitude: propertyData.longitude || 0,
-      city: propertyData.city || "",
-      budget: propertyData.budget || { min: 0, max: 0 },
-      bedrooms: propertyData.bedrooms || 1,
-      bathrooms: propertyData.bathrooms || 1,
-      amenities: propertyData.amenities || [],
-      photos: propertyData.photos || [],
-      categorizedImages: propertyData.categorizedImages || {},
-      videoUrl: propertyData.videoUrl || "",
-      ownerVerified: false,
-      ownerVerifiedAt: null,
-      verified: false,
-      safetyRating: 0,
-      reviews: [],
-      landmarks: propertyData.landmarks || [],
-      availableFrom: propertyData.availableFrom
-        ? new Date(propertyData.availableFrom)
-        : new Date(),
-    });
-
-    await property.save();
-
-    // Update owner's properties list
-    try {
-      await OwnerProfile.findByIdAndUpdate(
-        propertyData.ownerId,
-        { $push: { properties: property._id } },
-        { upsert: false },
-      );
-    } catch (e) {
-      console.log("Error updating owner profile:", e);
-    }
-
-    // Convert S3 keys to presigned URLs before sending response
-    const propertyWithUrls = await convertKeysToUrls(property);
-
-    res.status(201).json({
-      success: true,
-      data: propertyWithUrls,
-      message: "Property created successfully",
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      error: error.message || "Failed to create property",
-    });
-  }
-});
-
-// PATCH /api/properties/:id/owner-verification - Owner verifies their own property listing
-router.patch(
-  "/:id/owner-verification",
+// PUT /api/properties/:id - Update a property
+router.put(
+  "/:id",
   authenticateToken,
-  async (req: Request, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
-      const userId = (req as any).userId;
+      const updates = { ...req.body };
+      const userId = req.userId;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: "Not authenticated",
+        });
+      }
+
+      const existing = await Property.findById(id);
+      if (!existing) {
+        return res.status(404).json({
+          success: false,
+          error: "Property not found",
+        });
+      }
+
+      const isAdmin = isAdminRequest(req);
+      const isOwner = existing.ownerId.toString() === userId;
+      if (!isAdmin && !isOwner) {
+        return res.status(403).json({
+          success: false,
+          error: "Only property owner or admin can update this property",
+        });
+      }
+
+      // Never allow direct ownership transfer from this endpoint
+      delete (updates as any).ownerId;
+
+      // Only admin can set verification/moderation fields
+      const restrictedFields = [
+        "verified",
+        "verificationBadge",
+        "status",
+        "moderationNotes",
+        "reviewedBy",
+        "reviewedAt",
+        "ownerVerified",
+        "ownerVerifiedAt",
+      ];
+
+      if (!isAdmin) {
+        restrictedFields.forEach((field) => delete (updates as any)[field]);
+
+        // Any owner edit requires re-verification by admin
+        (updates as any).verified = false;
+        (updates as any).verificationBadge = false;
+        (updates as any).status = "pending_review";
+        (updates as any).reviewedBy = null;
+        (updates as any).reviewedAt = null;
+        (updates as any).moderationNotes = "";
+      }
+
+      const property = await Property.findByIdAndUpdate(
+        id,
+        { ...updates, updatedAt: new Date() },
+        { new: true },
+      );
+
+      if (!property) {
+        return res.status(404).json({
+          success: false,
+          error: "Property not found",
+        });
+      }
+
+      // Convert S3 keys to presigned URLs before sending response
+      const propertyWithUrls = await convertKeysToUrls(property);
+
+      res.json({
+        success: true,
+        data: propertyWithUrls,
+        message: "Property updated successfully",
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        error: error.message || "Failed to update property",
+      });
+    }
+  },
+);
+
+// DELETE /api/properties/:id - Delete a property
+router.delete(
+  "/:id",
+  authenticateToken,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const userId = req.userId;
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: "Not authenticated",
+        });
+      }
 
       const property = await Property.findById(id);
       if (!property) {
@@ -314,111 +488,40 @@ router.patch(
         });
       }
 
-      if (property.ownerId.toString() !== userId) {
+      const isAdmin = isAdminRequest(req);
+      const isOwner = property.ownerId.toString() === userId;
+      if (!isAdmin && !isOwner) {
         return res.status(403).json({
           success: false,
-          error: "Only property owner can verify this listing",
+          error: "Only property owner or admin can delete this property",
         });
       }
 
-      property.ownerVerified = true;
-      property.ownerVerifiedAt = new Date();
-      property.updatedAt = new Date();
-      await property.save();
+      await Property.findByIdAndDelete(id);
 
-      const propertyWithUrls = await convertKeysToUrls(property);
+      // Update owner's properties list
+      if (property.ownerId) {
+        try {
+          await OwnerProfile.findByIdAndUpdate(property.ownerId, {
+            $pull: { properties: property._id },
+          });
+        } catch (e) {
+          console.log("Error updating owner profile:", e);
+        }
+      }
 
-      return res.json({
+      res.json({
         success: true,
-        data: propertyWithUrls,
-        message: "Property owner verification completed",
+        message: "Property deleted successfully",
       });
     } catch (error: any) {
-      return res.status(500).json({
+      res.status(500).json({
         success: false,
-        error: error.message || "Failed to verify property",
+        error: error.message || "Failed to delete property",
       });
     }
   },
 );
-
-// PUT /api/properties/:id - Update a property
-router.put("/:id", async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const updates = req.body;
-
-    // Handle mongoose ObjectId for ownerId if present
-    if (updates.ownerId) {
-      updates.ownerId = new mongoose.Types.ObjectId(updates.ownerId);
-    }
-
-    const property = await Property.findByIdAndUpdate(
-      id,
-      { ...updates, updatedAt: new Date() },
-      { new: true },
-    );
-
-    if (!property) {
-      return res.status(404).json({
-        success: false,
-        error: "Property not found",
-      });
-    }
-
-    // Convert S3 keys to presigned URLs before sending response
-    const propertyWithUrls = await convertKeysToUrls(property);
-
-    res.json({
-      success: true,
-      data: propertyWithUrls,
-      message: "Property updated successfully",
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      error: error.message || "Failed to update property",
-    });
-  }
-});
-
-// DELETE /api/properties/:id - Delete a property
-router.delete("/:id", async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-
-    const property = await Property.findById(id);
-    if (!property) {
-      return res.status(404).json({
-        success: false,
-        error: "Property not found",
-      });
-    }
-
-    await Property.findByIdAndDelete(id);
-
-    // Update owner's properties list
-    if (property.ownerId) {
-      try {
-        await OwnerProfile.findByIdAndUpdate(property.ownerId, {
-          $pull: { properties: property._id },
-        });
-      } catch (e) {
-        console.log("Error updating owner profile:", e);
-      }
-    }
-
-    res.json({
-      success: true,
-      message: "Property deleted successfully",
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      error: error.message || "Failed to delete property",
-    });
-  }
-});
 
 // GET /api/properties/owner/:ownerId - Get properties by owner
 router.get("/owner/:ownerId", async (req: Request, res: Response) => {
@@ -463,7 +566,10 @@ router.get("/search/nearby", async (req: Request, res: Response) => {
     const rad = Number(radius);
 
     // Fetch all properties from MongoDB
-    const allProperties = await Property.find({});
+    const allProperties = await Property.find({
+      verified: true,
+      status: "approved",
+    });
 
     const properties: any[] = [];
     for (const property of allProperties) {

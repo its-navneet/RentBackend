@@ -1,98 +1,94 @@
 import express, { Request, Response } from "express";
-import db from "../services/db";
-import { Booking, IBooking } from "../models/Booking";
+import { Booking } from "../models/Booking";
 import { Property } from "../models/Property";
+import { User } from "../models/User";
 import mongoose from "mongoose";
 
 const router = express.Router();
 
+const toObjectIdOrNull = (value?: string): mongoose.Types.ObjectId | null => {
+  if (!value) return null;
+  if (!mongoose.Types.ObjectId.isValid(value)) return null;
+  return new mongoose.Types.ObjectId(value);
+};
+
+const enrichBooking = async (booking: any) => {
+  const property = booking.propertyId
+    ? await Property.findById(booking.propertyId).select("title address city")
+    : null;
+
+  const tenant = booking.studentId
+    ? await User.findById(booking.studentId).select("name email")
+    : null;
+
+  return {
+    id: booking._id.toString(),
+    _id: booking._id,
+    propertyId: booking.propertyId?.toString?.() ?? "",
+    tenantId: booking.studentId?.toString?.() ?? "",
+    studentId: booking.studentId?.toString?.() ?? "",
+    ownerResponse: booking.ownerResponse,
+    visitDate: booking.visitDate,
+    visitNote: booking.visitNote ?? "",
+    status: booking.status,
+    createdAt: booking.createdAt,
+    propertyTitle: property?.title ?? "",
+    propertyLocation: [property?.address ?? "", property?.city ?? ""]
+      .filter(Boolean)
+      .join(", "),
+    tenantName: tenant?.name ?? "",
+    tenantEmail: tenant?.email ?? "",
+  };
+};
+
 // GET /api/bookings - Get all bookings
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const { studentId, ownerId, propertyId, status } = req.query;
-    const bookings: any[] = [];
+    const { studentId, tenantId, ownerId, propertyId, status } = req.query as {
+      studentId?: string;
+      tenantId?: string;
+      ownerId?: string;
+      propertyId?: string;
+      status?: string;
+    };
 
-    const snapshot = await db.collection("bookings").get();
-    snapshot.forEach((doc: any) => {
-      bookings.push({ id: doc.id, ...doc.data() });
-    });
+    const query: any = {};
 
-    // Apply filters
-    let filteredBookings = bookings;
-    if (studentId) {
-      filteredBookings = filteredBookings.filter(
-        (b) => b.studentId === studentId || b.tenantId === studentId,
-      );
+    const tenantObjectId = toObjectIdOrNull(studentId ?? tenantId);
+    if ((studentId || tenantId) && !tenantObjectId) {
+      return res
+        .status(400)
+        .json({ success: false, error: "Invalid tenantId/studentId" });
     }
+    if (tenantObjectId) query.studentId = tenantObjectId;
+
+    const propertyObjectId = toObjectIdOrNull(propertyId);
+    if (propertyId && !propertyObjectId) {
+      return res
+        .status(400)
+        .json({ success: false, error: "Invalid propertyId" });
+    }
+    if (propertyObjectId) query.propertyId = propertyObjectId;
+
+    if (status) query.status = status;
+
     if (ownerId) {
-      // Get properties owned by this owner
-      const properties: any[] = [];
-      const propSnapshot = await db
-        .collection("properties")
-        .where("ownerId", "==", ownerId)
-        .get();
-      propSnapshot.forEach((doc: any) => {
-        properties.push(doc.data());
-      });
-      const ownerPropertyIds = properties.map((p) => p.id);
-      filteredBookings = filteredBookings.filter((b) =>
-        ownerPropertyIds.includes(b.propertyId),
-      );
-    }
-    if (propertyId) {
-      filteredBookings = filteredBookings.filter(
-        (b) => b.propertyId === propertyId,
-      );
-    }
-    if (status) {
-      filteredBookings = filteredBookings.filter((b) => b.status === status);
+      const ownerObjectId = toObjectIdOrNull(ownerId);
+      if (!ownerObjectId) {
+        return res
+          .status(400)
+          .json({ success: false, error: "Invalid ownerId" });
+      }
+
+      const ownerProperties = await Property.find({ ownerId: ownerObjectId })
+        .select("_id")
+        .lean();
+      const ownerPropertyIds = ownerProperties.map((p: any) => p._id);
+      query.propertyId = { $in: ownerPropertyIds };
     }
 
-    // Enrich bookings with property and tenant details
-    const enrichedBookings = await Promise.all(
-      filteredBookings.map(async (booking) => {
-        try {
-          // Fetch property details
-          let propertyTitle = "";
-          let propertyLocation = "";
-          if (booking.propertyId) {
-            const propDoc = await db
-              .collection("properties")
-              .doc(booking.propertyId)
-              .get();
-            if (propDoc.exists) {
-              const propData = propDoc.data();
-              propertyTitle = propData?.title || "";
-              propertyLocation = propData?.location || propData?.address || "";
-            }
-          }
-
-          // Fetch tenant/student details
-          let tenantName = "";
-          let tenantEmail = "";
-          const tenantId = booking.studentId || booking.tenantId;
-          if (tenantId) {
-            const tenantDoc = await db.collection("users").doc(tenantId).get();
-            if (tenantDoc.exists) {
-              const tenantData = tenantDoc.data();
-              tenantName = tenantData?.name || "";
-              tenantEmail = tenantData?.email || "";
-            }
-          }
-
-          return {
-            ...booking,
-            propertyTitle,
-            propertyLocation,
-            tenantName,
-            tenantEmail,
-          };
-        } catch (err) {
-          console.error("Error enriching booking:", err);
-          return booking;
-        }
-      }),
-    );
+    const bookings = await Booking.find(query).sort({ createdAt: -1 });
+    const enrichedBookings = await Promise.all(bookings.map(enrichBooking));
 
     res.json({
       success: true,
@@ -110,50 +106,26 @@ router.get("/", async (req: Request, res: Response) => {
 router.get("/:id", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const doc = await db.collection("bookings").doc(id).get();
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res
+        .status(400)
+        .json({ success: false, error: "Invalid booking id" });
+    }
 
-    if (!doc.exists) {
+    const booking = await Booking.findById(id);
+
+    if (!booking) {
       return res.status(404).json({
         success: false,
         error: "Booking not found",
       });
     }
 
-    const booking = { id: doc.id, ...doc.data() };
-
-    // Enrich with property and tenant details
-    try {
-      // Fetch property details
-      if (booking.propertyId) {
-        const propDoc = await db
-          .collection("properties")
-          .doc(booking.propertyId)
-          .get();
-        if (propDoc.exists) {
-          const propData = propDoc.data();
-          booking.propertyTitle = propData?.title || "";
-          booking.propertyLocation =
-            propData?.location || propData?.address || "";
-        }
-      }
-
-      // Fetch tenant/student details
-      const tenantId = booking.studentId || booking.tenantId;
-      if (tenantId) {
-        const tenantDoc = await db.collection("users").doc(tenantId).get();
-        if (tenantDoc.exists) {
-          const tenantData = tenantDoc.data();
-          booking.tenantName = tenantData?.name || "";
-          booking.tenantEmail = tenantData?.email || "";
-        }
-      }
-    } catch (err) {
-      console.error("Error enriching booking:", err);
-    }
+    const data = await enrichBooking(booking);
 
     res.json({
       success: true,
-      data: booking,
+      data,
     });
   } catch (error: any) {
     res.status(500).json({
@@ -166,18 +138,37 @@ router.get("/:id", async (req: Request, res: Response) => {
 // POST /api/bookings - Create a new booking
 router.post("/", async (req: Request, res: Response) => {
   try {
-    const { propertyId, studentId, visitDate } = req.body;
+    const { propertyId, studentId, tenantId, visitDate, visitNote, comment } =
+      req.body as {
+        propertyId?: string;
+        studentId?: string;
+        tenantId?: string;
+        visitDate?: string;
+        visitNote?: string;
+        comment?: string;
+      };
 
-    if (!propertyId || !studentId || !visitDate) {
+    const finalStudentId = studentId ?? tenantId;
+
+    if (!propertyId || !finalStudentId || !visitDate) {
       return res.status(400).json({
         success: false,
-        error: "propertyId, studentId, and visitDate are required",
+        error: "propertyId, studentId/tenantId, and visitDate are required",
       });
     }
 
-    // Check if property exists
-    const propertyDoc = await db.collection("properties").doc(propertyId).get();
-    if (!propertyDoc.exists) {
+    const propertyObjectId = toObjectIdOrNull(propertyId);
+    const studentObjectId = toObjectIdOrNull(finalStudentId);
+
+    if (!propertyObjectId || !studentObjectId) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid propertyId or studentId",
+      });
+    }
+
+    const property = await Property.findById(propertyObjectId);
+    if (!property) {
       return res.status(404).json({
         success: false,
         error: "Property not found",
@@ -185,18 +176,21 @@ router.post("/", async (req: Request, res: Response) => {
     }
 
     const booking = new Booking({
-      propertyId: new mongoose.Types.ObjectId(propertyId),
-      studentId: new mongoose.Types.ObjectId(studentId),
+      propertyId: propertyObjectId,
+      studentId: studentObjectId,
       ownerResponse: "pending",
       visitDate: new Date(visitDate),
+      visitNote: (visitNote ?? comment ?? "").toString().trim(),
       status: "pending",
     });
 
     await booking.save();
 
+    const data = await enrichBooking(booking);
+
     res.status(201).json({
       success: true,
-      data: booking,
+      data,
       message: "Booking created successfully",
     });
   } catch (error: any) {
@@ -211,22 +205,20 @@ router.post("/", async (req: Request, res: Response) => {
 router.put("/:id", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { ownerResponse, status, visitDate } = req.body;
+    const { ownerResponse, status, visitDate, visitNote } = req.body as {
+      ownerResponse?: string;
+      status?: string;
+      visitDate?: string;
+      visitNote?: string;
+    };
 
-    const doc = await db.collection("bookings").doc(id).get();
-    if (!doc.exists) {
-      return res.status(404).json({
-        success: false,
-        error: "Booking not found",
-      });
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res
+        .status(400)
+        .json({ success: false, error: "Invalid booking id" });
     }
 
-    const updates: any = {};
-    if (ownerResponse) updates.ownerResponse = ownerResponse;
-    if (status) updates.status = status;
-    if (visitDate) updates.visitDate = new Date(visitDate);
-
-    const booking = await Booking.findByIdAndUpdate(id, updates, { new: true });
+    const booking = await Booking.findById(id);
 
     if (!booking) {
       return res.status(404).json({
@@ -235,9 +227,18 @@ router.put("/:id", async (req: Request, res: Response) => {
       });
     }
 
+    if (ownerResponse) booking.ownerResponse = ownerResponse as any;
+    if (status) booking.status = status as any;
+    if (visitDate) booking.visitDate = new Date(visitDate);
+    if (typeof visitNote === "string") booking.visitNote = visitNote;
+
+    await booking.save();
+
+    const data = await enrichBooking(booking);
+
     res.json({
       success: true,
-      data: booking,
+      data,
       message: "Booking updated successfully",
     });
   } catch (error: any) {
@@ -253,8 +254,14 @@ router.delete("/:id", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    const doc = await db.collection("bookings").doc(id).get();
-    if (!doc.exists) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res
+        .status(400)
+        .json({ success: false, error: "Invalid booking id" });
+    }
+
+    const booking = await Booking.findById(id);
+    if (!booking) {
       return res.status(404).json({
         success: false,
         error: "Booking not found",

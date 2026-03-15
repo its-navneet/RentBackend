@@ -5,8 +5,8 @@
 
 import express, { Request, Response } from "express";
 import MatchProfile from "../models/MatchProfile";
+import MatchInterest from "../models/MatchInterest";
 import MatchingService from "../services/matching";
-import User from "../models/User";
 
 const router = express.Router();
 
@@ -25,24 +25,12 @@ router.post("/profile", async (req: Request, res: Response) => {
       });
     }
 
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    const matchProfile = await MatchProfile.findOneAndUpdate(
-      { userId },
-      {
-        userId,
-        userName: user.name,
-        email: user.email,
-        lifestyle,
-        interests: interests || [],
-        budgetRange,
-        bio: bio || "",
-      },
-      { upsert: true, new: true },
-    );
+    const matchProfile = await MatchingService.createOrUpdateProfile(userId, {
+      lifestyle,
+      interests,
+      budgetRange,
+      bio,
+    });
 
     res.json({
       message: "Match profile updated successfully",
@@ -62,10 +50,7 @@ router.get("/profile/:userId", async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
 
-    const profile = await MatchProfile.findOne({ userId });
-    if (!profile) {
-      return res.status(404).json({ error: "Match profile not found" });
-    }
+    const profile = await MatchingService.ensureProfile(userId);
 
     res.json(profile);
   } catch (error) {
@@ -107,14 +92,8 @@ router.get(
     try {
       const { userId1, userId2 } = req.params;
 
-      const profile1 = await MatchProfile.findOne({ userId: userId1 });
-      const profile2 = await MatchProfile.findOne({ userId: userId2 });
-
-      if (!profile1 || !profile2) {
-        return res
-          .status(404)
-          .json({ error: "One or both profiles not found" });
-      }
+      const profile1 = await MatchingService.ensureProfile(userId1);
+      const profile2 = await MatchingService.ensureProfile(userId2);
 
       const compatibility = MatchingService.calculateCompatibility(
         profile1,
@@ -135,7 +114,7 @@ router.get(
  */
 router.post("/show-interest", async (req: Request, res: Response) => {
   try {
-    const { fromUserId, toUserId } = req.body;
+    const { fromUserId, toUserId, message } = req.body;
 
     if (!fromUserId || !toUserId) {
       return res.status(400).json({
@@ -143,13 +122,64 @@ router.post("/show-interest", async (req: Request, res: Response) => {
       });
     }
 
-    // TODO: Implement interest tracking in a separate collection
-    // This is a placeholder for the mutual interest checking system
+    if (fromUserId === toUserId) {
+      return res.status(400).json({
+        error: "You cannot show interest in your own profile",
+      });
+    }
+
+    await Promise.all([
+      MatchingService.ensureProfile(fromUserId),
+      MatchingService.ensureProfile(toUserId),
+    ]);
+
+    const interest = await MatchInterest.findOneAndUpdate(
+      { fromUserId, toUserId },
+      {
+        fromUserId,
+        toUserId,
+        message: typeof message === "string" ? message.trim() : "",
+        updatedAt: new Date(),
+      },
+      {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true,
+      },
+    );
+
+    const reverseInterest = await MatchInterest.findOne({
+      fromUserId: toUserId,
+      toUserId: fromUserId,
+    });
+
+    const isMutual = Boolean(reverseInterest);
+
+    if (isMutual) {
+      await MatchInterest.updateMany(
+        {
+          $or: [
+            { fromUserId, toUserId },
+            { fromUserId: toUserId, toUserId: fromUserId },
+          ],
+        },
+        {
+          $set: {
+            isMutual: true,
+            updatedAt: new Date(),
+          },
+        },
+      );
+    }
 
     res.json({
-      message: "Interest recorded",
+      message: isMutual
+        ? "It’s a mutual match! You can start chatting now."
+        : "Interest recorded successfully",
       fromUserId,
       toUserId,
+      isMutual,
+      interestId: interest._id,
     });
   } catch (error) {
     console.error("Error recording interest:", error);
@@ -193,6 +223,63 @@ router.get("/profile-by-interests", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error searching profiles:", error);
     res.status(500).json({ error: "Failed to search profiles" });
+  }
+});
+
+/**
+ * GET /api/matching/interests/received/:userId
+ * Get pending (non-mutual) interests received by a user, with sender profile info
+ */
+router.get(
+  "/interests/received/:userId",
+  async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.params;
+
+      const interests = await MatchInterest.find({
+        toUserId: userId,
+        isMutual: false,
+      }).sort({ createdAt: -1 });
+
+      const populated = await Promise.all(
+        interests.map(async (interest) => {
+          const profile = await MatchProfile.findOne({
+            userId: interest.fromUserId,
+          }).lean();
+          return {
+            _id: interest._id.toString(),
+            fromUserId: interest.fromUserId.toString(),
+            fromUserName: profile?.userName ?? "Unknown",
+            fromUserBio: profile?.bio ?? "",
+            fromUserInterests: profile?.interests ?? [],
+            fromUserBudget: profile?.budgetRange ?? { min: 0, max: 0 },
+            message: interest.message ?? "",
+            isMutual: interest.isMutual,
+            createdAt: interest.createdAt,
+          };
+        }),
+      );
+
+      res.json({ interests: populated, total: populated.length });
+    } catch (error) {
+      console.error("Error fetching received interests:", error);
+      res.status(500).json({ error: "Failed to fetch received interests" });
+    }
+  },
+);
+
+/**
+ * DELETE /api/matching/interests/:interestId
+ * Decline / remove a received interest
+ */
+router.delete("/interests/:interestId", async (req: Request, res: Response) => {
+  try {
+    const { interestId } = req.params;
+    await MatchInterest.findByIdAndDelete(interestId);
+    res.json({ message: "Interest removed successfully" });
+  } catch (error) {
+    console.error("Error removing interest:", error);
+    res.status(500).json({ error: "Failed to remove interest" });
   }
 });
 

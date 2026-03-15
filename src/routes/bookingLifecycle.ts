@@ -45,9 +45,14 @@ router.post("/visit-request", async (req: Request, res: Response) => {
 
     await visitRequest.save();
 
+    const populatedVisitRequest = await VisitRequest.findById(visitRequest._id)
+      .populate("tenantId", "name email phone")
+      .populate("ownerId", "name email phone")
+      .populate("propertyId", "title address");
+
     res.status(201).json({
       message: "Visit request created",
-      visitRequest,
+      visitRequest: populatedVisitRequest ?? visitRequest,
     });
   } catch (error) {
     console.error("Error creating visit request:", error);
@@ -147,9 +152,16 @@ router.patch(
         return res.status(404).json({ error: "Visit request not found" });
       }
 
+      const populatedVisitRequest = await VisitRequest.findById(
+        visitRequest._id,
+      )
+        .populate("tenantId", "name email phone")
+        .populate("ownerId", "name email phone")
+        .populate("propertyId", "title address");
+
       res.json({
         message: "Visit request updated",
-        visitRequest,
+        visitRequest: populatedVisitRequest ?? visitRequest,
       });
     } catch (error) {
       console.error("Error updating visit request:", error);
@@ -210,9 +222,16 @@ router.post("/booking-request", async (req: Request, res: Response) => {
 
     await bookingRequest.save();
 
+    const populatedBookingRequest = await BookingRequest.findById(
+      bookingRequest._id,
+    )
+      .populate("tenantId", "name email phone")
+      .populate("ownerId", "name email phone")
+      .populate("propertyId", "title address");
+
     res.status(201).json({
       message: "Booking request created",
-      bookingRequest,
+      bookingRequest: populatedBookingRequest ?? bookingRequest,
     });
   } catch (error) {
     console.error("Error creating booking request:", error);
@@ -320,9 +339,46 @@ router.patch(
         return res.status(404).json({ error: "Booking request not found" });
       }
 
+      let createdStayRecord = null;
+      if (status === "confirmed") {
+        const existingStay = await StayRecord.findOne({
+          bookingRequestId: bookingRequest._id,
+        });
+
+        if (!existingStay) {
+          createdStayRecord = new StayRecord({
+            tenantId: bookingRequest.tenantId,
+            ownerId: bookingRequest.ownerId,
+            propertyId: bookingRequest.propertyId,
+            bookingRequestId: bookingRequest._id,
+            checkInDate: bookingRequest.proposedCheckInDate,
+            monthlyRent: bookingRequest.monthlyRent,
+            depositAmount: bookingRequest.depositAmount,
+            status: "upcoming",
+          });
+          await createdStayRecord.save();
+
+          const monthStart = new Date(bookingRequest.proposedCheckInDate);
+          monthStart.setDate(1);
+          await LedgerService.createMonthlyLedger(
+            createdStayRecord._id.toString(),
+            monthStart,
+            bookingRequest.monthlyRent,
+          );
+        }
+      }
+
+      const populatedBookingRequest = await BookingRequest.findById(
+        bookingRequest._id,
+      )
+        .populate("tenantId", "name email phone")
+        .populate("ownerId", "name email phone")
+        .populate("propertyId", "title address");
+
       res.json({
         message: "Booking request updated",
-        bookingRequest,
+        bookingRequest: populatedBookingRequest ?? bookingRequest,
+        stayRecord: createdStayRecord,
       });
     } catch (error) {
       console.error("Error updating booking request:", error);
@@ -383,9 +439,14 @@ router.post("/stay-record", async (req: Request, res: Response) => {
       monthlyRent,
     );
 
+    const populatedStayRecord = await StayRecord.findById(stayRecord._id)
+      .populate("tenantId", "name email phone")
+      .populate("ownerId", "name email phone")
+      .populate("propertyId", "title address");
+
     res.status(201).json({
       message: "Stay record created",
-      stayRecord,
+      stayRecord: populatedStayRecord ?? stayRecord,
     });
   } catch (error) {
     console.error("Error creating stay record:", error);
@@ -502,9 +563,14 @@ router.patch(
         return res.status(404).json({ error: "Stay record not found" });
       }
 
+      const populatedStayRecord = await StayRecord.findById(stayRecord._id)
+        .populate("tenantId", "name email phone")
+        .populate("ownerId", "name email phone")
+        .populate("propertyId", "title address");
+
       res.json({
         message: "Stay record updated",
-        stayRecord,
+        stayRecord: populatedStayRecord ?? stayRecord,
       });
     } catch (error) {
       console.error("Error updating stay record:", error);

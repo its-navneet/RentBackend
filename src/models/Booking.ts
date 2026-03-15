@@ -3,10 +3,10 @@
  * MongoDB schema for property bookings
  */
 
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema } from "mongoose";
 
-export type BookingStatus = 'pending' | 'confirmed' | 'cancelled';
-export type OwnerResponse = 'pending' | 'accepted' | 'rejected';
+export type BookingStatus = "pending" | "confirmed" | "cancelled";
+export type OwnerResponse = "pending" | "accepted" | "rejected";
 
 export interface IBooking extends Document {
   _id: mongoose.Types.ObjectId;
@@ -14,6 +14,7 @@ export interface IBooking extends Document {
   studentId: mongoose.Types.ObjectId;
   ownerResponse: OwnerResponse;
   visitDate: Date;
+  visitNote?: string;
   status: BookingStatus;
   createdAt: Date;
 }
@@ -21,27 +22,31 @@ export interface IBooking extends Document {
 const BookingSchema = new Schema<IBooking>({
   propertyId: {
     type: Schema.Types.ObjectId,
-    ref: 'Property',
+    ref: "Property",
     required: true,
   },
   studentId: {
     type: Schema.Types.ObjectId,
-    ref: 'User',
+    ref: "User",
     required: true,
   },
   ownerResponse: {
     type: String,
-    enum: ['pending', 'accepted', 'rejected'],
-    default: 'pending',
+    enum: ["pending", "accepted", "rejected"],
+    default: "pending",
   },
   visitDate: {
     type: Date,
     required: true,
   },
+  visitNote: {
+    type: String,
+    default: "",
+  },
   status: {
     type: String,
-    enum: ['pending', 'confirmed', 'cancelled'],
-    default: 'pending',
+    enum: ["pending", "confirmed", "cancelled"],
+    default: "pending",
   },
   createdAt: {
     type: Date,
@@ -52,7 +57,6 @@ const BookingSchema = new Schema<IBooking>({
 // Indexes for faster queries
 BookingSchema.index({ propertyId: 1 });
 
-export const Booking = mongoose.model<IBooking>('Booking', BookingSchema);
+export const Booking = mongoose.model<IBooking>("Booking", BookingSchema);
 
 export default Booking;
-

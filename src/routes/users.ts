@@ -103,7 +103,19 @@ router.get("/:id", async (req: Request, res: Response) => {
 router.put("/:id", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
+    const updates = { ...req.body };
+
+    // Verification and moderation flags are admin-controlled via /api/admin routes
+    const restrictedFields = [
+      "verified",
+      "verificationStatus",
+      "backgroundCheckStatus",
+      "isActive",
+      "isBlocked",
+      "role",
+      "verificationMeta",
+    ];
+    restrictedFields.forEach((field) => delete (updates as any)[field]);
 
     const doc = await db.collection("users").doc(id).get();
     if (!doc.exists) {

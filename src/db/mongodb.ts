@@ -6,11 +6,15 @@
 import mongoose from "mongoose";
 import { log } from "console";
 
-const MONGODB_URI = process.env.MONGODB_URI || "";
-
 export const connectDB = async (): Promise<void> => {
   try {
+    const MONGODB_URI = process.env.MONGODB_URI || "";
     console.log("mongo_url", MONGODB_URI);
+
+    if (!MONGODB_URI) {
+      throw new Error("MONGODB_URI environment variable is not set");
+    }
+
     const conn = await mongoose.connect(MONGODB_URI, {
       tls: true,
     });
